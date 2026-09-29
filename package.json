@@ -1,0 +1,15 @@
+{
+  "name": "community-tourism-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["backend", "admin-web"],
+  "scripts": {
+    "dev": "npm run dev:backend",
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:admin": "npm run dev --workspace admin-web",
+    "build": "npm run build --workspace admin-web",
+    "check": "npm run check --workspace backend && npm run build --workspace admin-web",
+    "test": "npm run test --workspace backend"
+  },
+  "engines": { "node": ">=22.12.0", "npm": ">=10.0.0" }
+}

@@ -1,0 +1,37 @@
+# Environment files: commit only explicitly named examples
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Node.js workspaces
+node_modules/
+**/node_modules/
+dist/
+coverage/
+npm-debug.log*
+
+# IDE and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Flutter / Android generated and signing files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+
+# Logs and local data
+*.log
+tmp/
+temp/
