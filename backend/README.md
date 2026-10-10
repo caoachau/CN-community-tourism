@@ -6,6 +6,7 @@ From the repository root, copy `backend/.env.example` to `backend/.env`, then ru
 
 ```powershell
 npm install
+npm run db:check --workspace backend
 npm run dev:backend
 ```
 
@@ -15,6 +16,16 @@ The API listens on `http://localhost:5000`. Verify it with:
 Invoke-RestMethod http://localhost:5000/api/health
 ```
 
-The health route is a process liveness check; no database connection is claimed by this endpoint yet. The architecture selects mysql2/promise, which will be added when the data layer is implemented.
+Fill `DATABASE_URL` with the current Aiven URI and configure `DB_SSL_CA_PATH` before starting. Credentials stay in the ignored `.env`. The backend uses `mysql2/promise` with CA and hostname verification; startup requires a successful TLS/database check.
+
+`/api/health` reports process liveness. `/api/ready` verifies the database connection and returns 200 or a generic 503 without exposing connection details. Shutdown closes HTTP and the database pool.
+
+`npm run db:check:tls --workspace backend` also checks that an unrelated CA and a wrong TLS hostname are rejected. Both commands only inspect the connection and set its session timezone; neither runs migrations, seeds or business writes.
+
+## Render
+
+See [RENDER.md](RENDER.md) and the root [render.yaml](../render.yaml). With `rootDir: backend`, Build Command is `npm ci --omit=dev --no-audit --no-fund` and Start Command is `npm start`.
+
+`backend/package-lock.json` supports standalone deployment; the root lockfile supports the complete npm workspace. Keep both in sync when backend dependencies change. For example, after editing `backend/package.json`, run `npm install` at the root and `npm install --package-lock-only --ignore-scripts --workspaces=false` **from inside `backend/`**. Confirm neither lockfile introduces a `file:..` dependency; `npm ci` must also pass in a clean copy containing only backend files.
 
 The proposed MySQL schema is in [`migrations/`](migrations/README.md). See the [database design](../Tai%20lieu%20he%20thong/Thiet%20ke%20CSDL/README.md) for the ERD, workbook analysis and required transaction rules. Migrations are not run at API startup.

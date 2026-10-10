@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+services:
+  - type: web
+    name: community-tourism-api
+    runtime: node
+    plan: free
+    region: singapore
+    repo: https://github.com/caocahau/CN-community-tourism
+    branch: master
+    rootDir: backend
+    buildCommand: npm ci --omit=dev --no-audit --no-fund
+    startCommand: npm start
+    healthCheckPath: /api/ready
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: DB_EXPECTED_DATABASE
+        value: defaultdb
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSL_CA
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

@@ -65,19 +65,16 @@ Mục tiêu bản rút gọn v2: **41 base tables, 101 foreign keys, 140 CHECK c
 
 ## 4. Kết nối backend khi triển khai
 
-Driver theo kiến trúc là mysql2/promise; chỉ Express kết nối database, không nhúng host/user/password vào Flutter hoặc React. Secret để trong `.env` local hoặc secret store. Template cấu hình gợi ý (chưa phải database module đã viết):
+Backend đã dùng mysql2/promise và kiểm tra TLS khi khởi động; chỉ Express kết nối database, không nhúng host/user/password vào Flutter hoặc React. Secret để trong `.env` local hoặc Render Environment. Cấu hình hiện tại:
 
 ```dotenv
-DB_HOST=<copy-host-from-aiven-console>
-DB_PORT=26464
-DB_NAME=defaultdb
-DB_USER=<runtime-database-user>
-DB_PASSWORD=<local-secret>
+DATABASE_URL=mysql://USER:PASSWORD@HOST:26464/defaultdb?ssl-mode=REQUIRED
+DB_EXPECTED_DATABASE=defaultdb
 DB_SSL_CA_PATH=<absolute-path-to-ca.pem>
 DB_POOL_SIZE=5
 ```
 
-Chọn pool nhỏ ban đầu và kiểm tra giới hạn connection thực tế của gói Aiven trước khi tăng. Dùng CA và xác minh hostname; không đặt rejectUnauthorized=false. Session UTC, READ COMMITTED trong Unit of Work; BIGINT/DECIMAL được đọc không mất độ chính xác, ID truyền dạng chuỗi, tiền xử lý số nguyên/decimal.
+Chọn pool nhỏ ban đầu và kiểm tra giới hạn connection thực tế của gói Aiven trước khi tăng. Dùng CA và xác minh hostname; không đặt rejectUnauthorized=false. Probe thiết lập session UTC; driver giữ chính xác BIGINT/DECIMAL. Các repository/Unit of Work nghiệp vụ sau này vẫn phải thiết lập session UTC và isolation READ COMMITTED như hợp đồng transaction; phần đó chưa được triển khai bởi task kết nối. ID truyền dạng chuỗi, tiền xử lý số nguyên/decimal. Trên Render có thể dùng `DB_SSL_CA` chứa PEM thay đường dẫn file; xem [hướng dẫn và kết quả kiểm chứng](../../backend/RENDER.md).
 
 Tách user chạy migration có CREATE/ALTER/INDEX/REFERENCES với user runtime chỉ có quyền thao tác cần thiết. Không cấp DROP/ALTER/DELETE lịch sử cho runtime; các command lưu trữ dùng archive/reversal. Dọn session hết hạn nếu cần dùng tác vụ/quyền bảo trì riêng. Không cần đổi cấu hình server toàn cục để chạy schema này.
 

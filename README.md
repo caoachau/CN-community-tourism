@@ -16,10 +16,11 @@ In PowerShell, from the repository root:
 Copy-Item backend/.env.example backend/.env
 Copy-Item frontend/admin-web/.env.example frontend/admin-web/.env
 npm install
+npm run db:check --workspace backend
 npm run dev:backend
 ```
 
-In a second terminal, run `npm run dev:admin`. The API listens on `http://localhost:5000`; the admin UI listens on the Vite development URL (normally `http://localhost:5173`). The admin health card checks the API.
+Fill the Aiven URI and CA settings in `backend/.env` before checking or starting the backend. In a second terminal, run `npm run dev:admin`. The API listens on `http://localhost:5000`; the admin UI listens on the Vite development URL (normally `http://localhost:5173`). The admin health card checks the API.
 
 Check the API directly:
 
@@ -27,7 +28,7 @@ Check the API directly:
 Invoke-RestMethod http://localhost:5000/api/health
 ```
 
-Expected response includes `success: true` and `data.status: "ok"`. This is a liveness endpoint only; a database connection/readiness check has not been implemented yet.
+Expected response includes `success: true` and `data.status: "ok"`. This is a liveness endpoint. `/api/ready` checks the database and returns 200 or 503; startup verifies Aiven TLS before listening. See [Render deployment](backend/RENDER.md) for the Free Blueprint and environment settings.
 
 ## Build and checks
 

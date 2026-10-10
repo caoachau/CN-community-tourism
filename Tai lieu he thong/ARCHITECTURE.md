@@ -12,13 +12,13 @@ Tài liệu đi cùng [MVP](MVP.md), [Use case](USE_CASES.md), [Đặc tả nghi
 | ADR-02 | Một ứng dụng Flutter Android có khu vực Khách và khu vực Chủ hộ. | Dùng chung tài khoản và phiên đăng nhập; chủ hộ chuyển khu vực để đặt hộ khác, không cần ứng dụng hoặc tài khoản khách thứ hai. |
 | ADR-03 | React/Vite là web dành riêng cho Admin. | Duyệt, kiểm soát nội dung, tài khoản, phản ánh và xem thống kê; không có thao tác xử lý booking/tiền thay hộ. |
 | ADR-04 | Một database MySQL/InnoDB dùng chung, phân quyền dữ liệu theo hộ trong application. | Các giao dịch phòng, slot, tài nguyên, proposal và booking có thể commit/rollback cùng nhau. Không tách database theo từng hộ. |
-| ADR-05 | Tầng truy cập dữ liệu dùng mysql2/promise, SQL có tham số và repository theo module; migration SQL có phiên bản. | Hiển thị rõ khóa và cùng connection trong các giao dịch phức tạp. Chưa cài dependency hay tạo schema trong bước chốt tài liệu. |
+| ADR-05 | Tầng truy cập dữ liệu dùng mysql2/promise, SQL có tham số và repository theo module; migration SQL có phiên bản. | Đã bổ sung driver, pool, kiểm tra TLS và readiness. Repository nghiệp vụ và Unit of Work triển khai theo module; schema không tự tạo khi khởi động. |
 | ADR-06 | REST/JSON qua HTTPS; backend là nơi có thẩm quyền tính giá, quyền, trạng thái và khả dụng. | Flutter/React chỉ kiểm tra đầu vào để hỗ trợ người dùng; kết quả cuối do backend xác nhận. |
 | ADR-07 | Giữ chỗ và tài nguyên được bảo vệ bằng transaction/khóa MySQL. | Không dùng cache, biến trong tiến trình Node hoặc cron làm nguồn quyết định còn chỗ. |
 | ADR-08 | Thông báo trong ứng dụng, xử lý hết hạn bằng job trong cùng codebase; không thêm broker hoặc microservice. | Job hỗ trợ đồng bộ trạng thái và thông báo; khả dụng vẫn đúng nếu job chậm hoặc dừng. |
 | ADR-09 | Ảnh lưu ở object storage qua giao diện tương thích S3; MySQL giữ metadata và object key. | Nội dung ảnh không nằm trong cột database; bản nháp và bản công khai được kiểm soát quyền riêng. Tên bucket/host là cấu hình môi trường. |
 
-Việc dùng connection pool, Promise API và truy vấn có tham số dựa trên các khả năng trong [tài liệu MySQL2](https://sidorares.github.io/node-mysql2/docs). Chọn driver này cho bản kiến trúc; các ghi chú cũ nhắc Prisma không phải một dependency đã triển khai hoặc điều kiện bắt buộc của nghiệp vụ.
+Việc dùng connection pool, Promise API và truy vấn có tham số dựa trên các khả năng trong [tài liệu MySQL2](https://sidorares.github.io/node-mysql2/docs). Driver đã được cài và kiểm chứng TLS với Aiven; xem [cấu hình Render và kết quả kiểm tra](../backend/RENDER.md). Không dùng Prisma. Kiểm thử kết nối không thay thế kiểm thử transaction nghiệp vụ.
 
 ## 2. Các thành phần và kết nối
 
