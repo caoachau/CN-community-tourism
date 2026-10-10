@@ -1,5 +1,16 @@
 # Kiểm tra thiết kế rút gọn v2
 
+## Cập nhật kiểm chứng MySQL thật — harness ngày 10/10/2026
+
+- Đã dựng MySQL 8.4.11 Docker trên loopback `127.0.0.1:3307`, độc lập với Aiven.
+- Đã chạy đủ 144 câu DDL khởi tạo trên schema test mới; MySQL xác nhận 41 bảng nghiệp vụ InnoDB, 101 FK, 140 CHECK được enforce và 41 PK.
+- 14 integration test đạt: fixture/rollback, FK khác hộ và slot, revision, công thức giá, kết quả item, proposal SENT duy nhất, lịch sử tiền/snapshot, cleanup, khóa bằng hai connection và tranh unique idempotency.
+- Xem [harness](../../backend/test/README.md) và [TLS Aiven/Render](../../backend/RENDER.md) cho cách chạy/phạm vi hiện tại. Chưa chạy migration/seed trên Aiven; chưa kiểm thử các command booking chưa có implementation.
+
+Phần bên dưới là kết quả tại **bước phân tích thiết kế trước khi có harness/driver**; các ghi chú chưa kết nối/chưa chạy server ở phần đó mô tả thời điểm kiểm tra cũ.
+
+## Kết quả tại bước phân tích thiết kế
+
 Ngày kiểm tra: 10/10/2026. Đích triển khai theo thông tin chủ dự án: Aiven MySQL 8.4.11. Đây là kiểm tra local cho artifact thiết kế; chưa kết nối hoặc thay đổi database cloud.
 
 | Kiểm tra đã chạy | Kết quả |

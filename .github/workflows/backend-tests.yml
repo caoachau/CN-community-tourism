@@ -1,0 +1,44 @@
+name: Backend tests
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/backend-tests.yml"
+  push:
+    branches: [master]
+    paths:
+      - "backend/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/backend-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mysql-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install workspace dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Backend syntax
+        run: npm run check --workspace backend
+      - name: Unit tests
+        run: npm test
+      - name: Start disposable MySQL 8.4.11
+        run: npm run test:db:up
+      - name: MySQL integration tests
+        run: npm run test:integration
+      - name: Stop test server
+        if: always()
+        run: npm run test:db:down

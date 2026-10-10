@@ -37,7 +37,7 @@ npm run check
 npm test
 ```
 
-`npm run check` validates backend JavaScript syntax and creates the production React build under ignored `frontend/admin-web/dist/`. `npm test` runs backend tests; it does not execute MySQL schema or business concurrency tests.
+`npm run check` validates backend JavaScript syntax and creates the production React build under ignored `frontend/admin-web/dist/`. `npm test` runs backend unit/HTTP tests without a database. Run `npm run test:db:up` followed by `npm run test:integration` for the real MySQL 8.4.11 migration/constraint/transaction suite. See the [test harness guide](backend/test/README.md); these checks do not execute against Aiven or replace future booking API acceptance tests.
 
 ## Workspace map
 

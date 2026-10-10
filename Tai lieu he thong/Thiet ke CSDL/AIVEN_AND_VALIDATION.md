@@ -86,7 +86,7 @@ Tách user chạy migration có CREATE/ALTER/INDEX/REFERENCES với user runtime
 - Phân tích cú pháp DDL bằng SQLGlot dialect MySQL: 41 CREATE, 101 ALTER FK, hai SET; không có câu lệnh bị fallback thành SQL chưa phân tích.
 - Kiểm tra cấu trúc FK/PK/UNIQUE, kiểu dữ liệu tham chiếu và tài liệu bằng công cụ local; kết quả cụ thể lưu ở [VALIDATION.md](VALIDATION.md).
 
-**Chưa chạy DDL hoặc kiểm thử hai connection trên MySQL/Aiven**. Máy hiện có Docker CLI nhưng engine không chạy; không dùng SQLite để thay thế rồi khẳng định SQL đã được MySQL chấp nhận. Parser chỉ xác nhận cú pháp mà parser hiểu, không chứng minh mọi giới hạn của server, quyền cloud hay tính đúng cạnh tranh.
+**Đã chạy DDL và 14 integration test trên MySQL 8.4.11 local bằng Docker**, gồm kiểm tra 41 bảng/101 FK/140 CHECK và hai connection độc lập cho khóa dòng/unique idempotency. Xem [harness và cách chạy](../../backend/test/README.md). Chưa chạy DDL trên Aiven và chưa kiểm thử cạnh tranh các command booking chưa được triển khai. Kiểm chứng TLS Aiven là một bài kiểm tra riêng, không thay thế nghiệm thu schema/nghiệp vụ.
 
 Sau khi tạo database thử và viết service command, cần chạy tối thiểu:
 

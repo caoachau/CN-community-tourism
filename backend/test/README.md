@@ -1,0 +1,82 @@
+# Harness kiểm thử và MySQL test database
+
+Harness dùng Node.js `node:test`, mysql2/promise và MySQL **8.4.11** trong Docker. Unit test chạy độc lập; integration test chạy migration thật và truy vấn trên InnoDB. MySQL local được publish ở loopback `127.0.0.1:3307`.
+
+## Chạy từ thư mục gốc repository
+
+Mở Docker Desktop ở chế độ Linux containers, sau đó:
+
+```powershell
+npm install
+npm run test:db:up
+npm test
+npm run test:integration
+```
+
+`test:db:up` chờ MySQL healthy. `npm test` chỉ chạy các file `backend/test/*.test.js`, không cần database. `test:integration` không bỏ qua khi database thiếu: lệnh trả lỗi để tránh báo thành công giả. Sau khi database chạy, `npm run test:all` chạy cả hai nhóm.
+
+Dừng và xóa container riêng của test bằng:
+
+```powershell
+npm run test:db:down
+```
+
+Container không có named volume lưu trữ; `test:db:down` xóa cả anonymous volume của project Compose test để không để lại dữ liệu/rác đĩa. Dữ liệu test mất khi chạy lệnh này. Đây không phải database phát triển hoặc database Aiven. Không đổi cấu hình này để trỏ container vào thư mục dữ liệu thật.
+
+## Database để xem bằng MySQL Workbench
+
+```powershell
+npm run test:db:prepare
+```
+
+Lệnh tạo một schema mới dạng `ctp_test_<pid>_<random>`, chạy migration và ghi fixture cơ bản. Tên schema được in trong kết quả JSON. Schema được giữ lại để xem trong Workbench đến khi dừng/xóa container test; chạy lại lệnh tạo schema mới và không ghi đè schema cũ.
+
+| Workbench | Giá trị chỉ dùng cho test local |
+| --- | --- |
+| Connection Method | Standard TCP/IP |
+| Hostname | `127.0.0.1` |
+| Port | `3307` |
+| Username | `ctp_test` |
+| Password | `ctp_local_test_only` |
+| Default Schema | Tên schema từ `test:db:prepare` |
+| SSL Mode | Disabled cho container local này |
+
+Fixture gồm Admin, khách, hai chủ hộ/hộ, danh mục, phòng, dịch vụ, offer ghép/riêng, lịch, thuyền và pool xe. Email dùng miền `.invalid`, liên hệ là dữ liệu giả và password hash là `!TEST_ONLY_NO_LOGIN!`; không dùng fixture này để kiểm thử đăng nhập hoặc làm tài khoản thật. Fixture chạy trong integration test được rollback; fixture của `test:db:prepare` được commit trong schema riêng.
+
+Mỗi schema có **41 bảng nghiệp vụ và một bảng `__test_harness`** lưu mã sở hữu/hash migration. Bảng này chỉ dành cho test, không thêm vào migration nghiệp vụ.
+
+## Cấu hình và bảo vệ phạm vi
+
+- Mặc định dùng URL local riêng có sẵn trong harness. Không đọc `backend/.env`, không dùng `DATABASE_URL` làm fallback.
+- Nếu cần thay đổi, copy `backend/.env.test.example` thành `backend/.env.test`; file này được Git ignore và chỉ lệnh test đọc.
+- Chỉ tên schema `ctp_test_...` được chấp nhận. `defaultdb`, tên thường, câu SQL trong tên và URL có tùy chọn không được phép đều bị chặn trước kết nối.
+- Khi biết `DATABASE_URL` của ứng dụng, harness từ chối cùng hostname/port dù tên schema khác. Không dùng server ứng dụng làm server test.
+- Mỗi lượt chạy tạo schema ngẫu nhiên bằng `CREATE DATABASE` không có `IF NOT EXISTS`. Không truncate hoặc reset schema do người dùng chỉ định. Cleanup chỉ xóa schema đã tạo thành công trong lượt đó và kiểm tra token sở hữu nếu marker đã được ghi.
+- Không tắt FK/CHECK. Migration chạy từng câu DDL trên schema mới; nếu lỗi thì dừng và dọn schema thuộc lượt chạy. MySQL DDL auto-commit, nên không giả định rollback được migration.
+- User `ctp_test` có quyền trên nhóm schema test, không được cấp quyền toàn server. Mật khẩu trong Compose là dữ liệu công khai cho container loopback, không phải secret Aiven.
+
+Test server từ xa phải là một server test riêng, có bootstrap schema `ctp_test_...` và user được quyền tạo/xóa các schema test. Cần `TEST_DATABASE_URL`, `TEST_ALLOW_REMOTE_DATABASE=1` và đúng một trong `TEST_DB_SSL_CA`/`TEST_DB_SSL_CA_PATH`. Nhánh từ xa dùng TLS xác minh CA/hostname như ứng dụng. Không tự cấu hình hoặc tạo tài nguyên cloud trong task này.
+
+## Viết thêm test
+
+Các tiện ích nằm ở `support/`:
+
+| Tiện ích | Mục đích |
+| --- | --- |
+| `createTestDatabase()` | Tạo schema riêng, chạy các migration đánh số, giữ marker sở hữu và trả hàm kết nối/dọn |
+| `database.rollback(callback)` | Transaction cho một test; rollback cả khi callback ném lỗi |
+| `database.connect()` | Connection độc lập, session UTC, READ COMMITTED, lock timeout ba giây |
+| `concurrentTransactions(database, callbacks)` | Bắt đầu từ hai đến tám transaction trên connection riêng qua barrier; trả mọi kết quả để kiểm tra winner/loser |
+| `seedBase`, `seedBooking`, `seedServiceItem` | Dữ liệu kiểm thử với ID trả về từ MySQL, không giả định ID cố định |
+
+Luôn `await database.dispose()` trong `after`. Với test khóa/cạnh tranh, dùng connection riêng và commit thật; transaction rollback bao ngoài một test không thể chứng minh xung đột giữa hai giao dịch. Helper cạnh tranh không tự retry hoặc che deadlock.
+
+Migration preflight hiện hỗ trợ DDL khởi tạo trong repository, tên bảng không qualify database, không stored routine/DELIMITER hoặc dấu chấm phẩy trong literal. Nếu thêm loại migration khác, mở rộng và kiểm thử parser trước khi dùng; không bỏ guard hoặc bật multi-statements tùy ý.
+
+## Phạm vi kiểm chứng
+
+Integration suite kiểm tra migration 41 bảng/101 FK/140 CHECK; fixture/rollback; FK khác hộ, slot/tài nguyên; chủ và phiên bản nội dung; công thức giá; kết quả từng hạng mục; một proposal SENT; giữ lịch sử tiền/snapshot; dọn schema; khóa hộ bằng hai connection và tranh unique idempotency.
+
+Đây là kiểm thử ràng buộc database và cơ sở transaction. Các endpoint booking, kiểm tra sức chứa, lịch trùng, xác nhận phương án, quyền actor, thu hồi phê duyệt và báo cáo vẫn cần kiểm thử qua implementation nghiệp vụ sau này. Việc suite đạt không có nghĩa 12 kịch bản nghiệm thu nghiệp vụ đã hoàn thành.
+
+Workflow [backend-tests.yml](../../.github/workflows/backend-tests.yml) chạy cùng các lệnh trên GitHub Actions với database Docker riêng và không cần secret Aiven. Workflow mới được thêm vào repository; chỉ có kết quả local cho đến khi được push và chạy trên GitHub.

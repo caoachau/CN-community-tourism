@@ -9,7 +9,12 @@
     "dev:admin": "npm run dev --workspace frontend/admin-web",
     "build": "npm run build --workspace frontend/admin-web",
     "check": "npm run check --workspace backend && npm run build --workspace frontend/admin-web",
-    "test": "npm run test --workspace backend"
+    "test": "npm run test --workspace backend",
+    "test:integration": "npm run test:integration --workspace backend",
+    "test:all": "npm run test:all --workspace backend",
+    "test:db:up": "npm run test:db:up --workspace backend",
+    "test:db:down": "npm run test:db:down --workspace backend",
+    "test:db:prepare": "npm run test:db:prepare --workspace backend"
   },
   "engines": { "node": ">=22.12.0", "npm": ">=10.0.0" }
 }

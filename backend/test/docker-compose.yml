@@ -1,0 +1,25 @@
+name: ctp-mysql-test
+services:
+  mysql:
+    image: mysql:8.4.11
+    ports:
+      - "127.0.0.1:${TEST_MYSQL_PORT:-3307}:3306"
+    environment:
+      # Public local-only test credentials. Never reuse for Aiven or Render.
+      MYSQL_ROOT_PASSWORD: ctp_local_root_only
+      MYSQL_DATABASE: ctp_test_control
+      MYSQL_USER: ctp_test
+      MYSQL_PASSWORD: ctp_local_test_only
+      MYSQL_INITDB_SKIP_TZINFO: "1"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    volumes:
+      - ./mysql-init.sql:/docker-entrypoint-initdb.d/01-test-permissions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql --protocol=TCP -h 127.0.0.1 -u $$MYSQL_USER -D $$MYSQL_DATABASE -e 'SELECT 1' >/dev/null 2>&1"]
+      start_period: 30s
+      interval: 3s
+      timeout: 5s
+      retries: 40
