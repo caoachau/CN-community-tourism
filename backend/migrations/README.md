@@ -1,0 +1,7 @@
+# Database design migrations
+
+`001_initial_schema.sql` is the proposed initial schema for Aiven MySQL 8.4.11: **41 tables, compact design v2**. It replaces the undeployed 55-table draft; it is not an upgrade script for an existing database. Run it once against an explicitly selected **empty development schema**. It does not create/drop databases, contain credentials, seed accounts, or implement application transactions. DDL statements auto-commit; an incomplete import must be inspected before continuing.
+
+Read the [database design](../../Tai%20lieu%20he%20thong/Thiet%20ke%20CSDL/README.md), [transaction contract](../../Tai%20lieu%20he%20thong/Thiet%20ke%20CSDL/TRANSACTIONS.md), and [Workbench/Aiven instructions](../../Tai%20lieu%20he%20thong/Thiet%20ke%20CSDL/AIVEN_AND_VALIDATION.md) first.
+
+Once deployed, keep this migration immutable and add numbered migrations for subsequent changes. A migration runner and checksummed migration history are not implemented yet; startup does not apply this file automatically. The Express API still has no database connection.
