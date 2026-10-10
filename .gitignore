@@ -1,37 +1,98 @@
-# Environment files: commit only explicitly named examples
+# Local configuration and credentials; keep safe examples versioned.
 .env
 .env.*
 !.env.example
 !.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+**/android/key.properties
+/Tai lieu he thong/env.docx
 
-# Node.js workspaces
+# Node.js / React / Vite (applies at any workspace depth).
 node_modules/
-**/node_modules/
 dist/
 coverage/
+.vite/
+.next/
+.nuxt/
+*.tsbuildinfo
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# IDE and OS
-.idea/
-.vscode/*
-!.vscode/extensions.json
-.DS_Store
-Thumbs.db
-
-# Flutter / Android generated and signing files
+# Flutter / Dart: both frontend/mobile-app/flutter_ho and flutter_khach.
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
+.pub-cache/
+.pub/
+.widget_preview/
 build/
-android/local.properties
-android/key.properties
-*.jks
-*.keystore
-*.p12
-*.mobileprovision
+**/doc/api/
+app.*.symbols
+app.*.map.json
+# Keep pubspec.yaml, pubspec.lock, .metadata, source, assets and tests.
+# Generated Dart sources (*.g.dart, *.freezed.dart, *.mocks.dart) may be committed.
 
-# Logs and local data
+# Android local SDK, build outputs and signing configuration.
+.gradle/
+**/android/local.properties
+**/android/captures/
+.cxx/
+.externalNativeBuild/
+*.apk
+*.aab
+*.ap_
+*.hprof
+*.class
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+
+# Flutter desktop / Apple generated artifacts.
+Pods/
+.symlinks/
+DerivedData/
+xcuserdata/
+**/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/.last_build_id
+**/linux/flutter/ephemeral/
+**/windows/flutter/ephemeral/
+# Platform-specific Flutter .gitignore files keep their own template rules.
+
+# IDE and operating system.
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs, temporary files and local caches.
 *.log
+*.tmp
+*.swp
+*.bak
+*.pyc
+__pycache__/
+.cache/
 tmp/
 temp/
+
+# Local database exports and Workbench cache; keep schema SQL and .mwb models.
+/database-backups/
+*.mwb.bak
+*.mwb.cache

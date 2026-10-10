@@ -30,7 +30,7 @@ flowchart TB
         API["Routes, validation và authorization"] --> Commands["Application services điều phối use case"]
         Commands --> Domain["Quy tắc nghiệp vụ trong sáu module"]
         Domain --> Repositories["Repositories và Unit of Work"]
-        Jobs["Job hết hạn và thông báo"] --> Commands
+        Jobs["Job hết hạn"] --> Commands
     end
     Repositories --> DB[("MySQL / InnoDB")]
     Commands --> Media["Media adapter"]
@@ -92,7 +92,7 @@ Locking read `SELECT ... FOR UPDATE` phải nằm trong transaction; khóa đư�
 
 Các thao tác tạo booking, gửi/sửa/chấp nhận phương án, chuyển trạng thái và ghi tiền có khóa chống trùng theo người thao tác + hành động + payload. Kết quả chỉ được công bố sau commit. Cùng thao tác thành công được gửi lại trả cùng kết quả; payload khác với cùng khóa bị từ chối.
 
-Audit và sự kiện cần xử lý được ghi cùng transaction. Job đọc sự kiện đã commit để tạo thông báo trong ứng dụng, có chống trùng theo sự kiện/người nhận. Lỗi tạo/đọc thông báo có thể retry mà không đảo ngược booking hoặc ghi thêm tiền. Không cần message broker ngoài MySQL trong MVP.
+Theo [thiết kế CSDL rút gọn v2](Thiet%20ke%20CSDL/README.md), audit và thông báo trong ứng dụng được ghi trực tiếp cùng transaction nghiệp vụ. UNIQUE(event_key, user_id) chống ghi trùng thông báo. Nếu ghi lỗi trước commit, retry toàn command với cùng idempotency key; lỗi đọc thông báo sau commit không đảo booking hoặc ghi thêm tiền. Không có gọi mạng trong transaction. MVP chưa cần outbox hoặc worker tạo thông báo riêng; job vẫn xử lý hết hạn. Khi bổ sung push/email, thêm outbox bằng migration để retry gửi bên ngoài độc lập.
 
 ## 5. Client, API và dữ liệu
 
