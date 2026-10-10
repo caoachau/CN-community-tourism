@@ -1,13 +1,13 @@
 import { createApp } from './app.js';
 import { createDatabase } from './database.js';
 import { DatabaseConfigError, databaseErrorCode } from './config/database.js';
+import { logger } from './shared/logger.js';
 
 const port = Number(process.env.PORT ?? '5000');
 let database;
 let server;
-const log = (entry) => console.log(JSON.stringify(entry));
 const startupDeadline = setTimeout(() => {
-  log({ level: 'error', message: 'Startup failed', code: 'STARTUP_TIMEOUT' });
+  logger.error({ event: 'startup_failed', code: 'STARTUP_TIMEOUT' }, 'Startup failed');
   process.exit(1);
 }, 40_000);
 
@@ -15,16 +15,20 @@ try {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new DatabaseConfigError('INVALID_PORT');
   database = createDatabase();
   const tls = await database.check();
-  log({ level: 'info', message: 'Database TLS verified', driver: 'mysql2/promise', ...tls });
-  const app = createApp({ checkDatabase: () => database.check() });
+  logger.info({ event: 'database_verified', driver: 'mysql2/promise', ...tls }, 'Database TLS verified');
+  const app = createApp({ checkDatabase: () => database.check(), logger });
   server = await new Promise((resolve, reject) => {
     const listener = app.listen(port, '0.0.0.0', () => resolve(listener));
     listener.once('error', reject);
   });
-  log({ level: 'info', message: 'API listening', port });
+  logger.info({ event: 'server_started', port }, 'API listening');
 } catch (error) {
-  log({ level: 'error', message: 'Startup failed', code: databaseErrorCode(error) });
-  await database?.close();
+  logger.error({ event: 'startup_failed', code: databaseErrorCode(error) }, 'Startup failed');
+  try {
+    await database?.close();
+  } catch {
+    logger.error({ event: 'startup_cleanup_failed', code: 'DATABASE_CLOSE_FAILED' }, 'Database cleanup failed');
+  }
   process.exitCode = 1;
 } finally {
   clearTimeout(startupDeadline);
@@ -34,11 +38,17 @@ let stopping = false;
 async function shutdown() {
   if (stopping) return;
   stopping = true;
-  const deadline = setTimeout(() => process.exit(1), 10_000);
+  logger.info({ event: 'shutdown_started' }, 'Shutting down API');
+  const deadline = setTimeout(() => {
+    logger.error({ event: 'shutdown_failed', code: 'SHUTDOWN_TIMEOUT' }, 'Shutdown timed out');
+    process.exit(1);
+  }, 10_000);
   try {
     if (server) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await database?.close();
+    logger.info({ event: 'shutdown_completed' }, 'API stopped');
   } catch {
+    logger.error({ event: 'shutdown_failed', code: 'SHUTDOWN_FAILED' }, 'Shutdown failed');
     process.exitCode = 1;
   } finally {
     clearTimeout(deadline);

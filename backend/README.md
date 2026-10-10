@@ -20,6 +20,8 @@ Fill `DATABASE_URL` with the current Aiven URI and configure `DB_SSL_CA_PATH` be
 
 `/api/health` reports process liveness. `/api/ready` verifies the database connection and returns 200 or a generic 503 without exposing connection details. Shutdown closes HTTP and the database pool.
 
+Swagger UI is available at `http://localhost:5000/api/docs/`; the OpenAPI document is at `/api/openapi.json`. See [API.md](API.md) for shared Zod validation, error codes/envelopes, request IDs and JSON logging. Configure `API_DOCS_ENABLED=false` to disable both documentation endpoints and `LOG_LEVEL` to control verbosity. Business routers will be mounted under `/api/v1`; Swagger currently documents the implemented health/readiness operations.
+
 `npm run db:check:tls --workspace backend` also checks that an unrelated CA and a wrong TLS hostname are rejected. Both commands only inspect the connection and set its session timezone; neither runs migrations, seeds or business writes.
 
 ## Render
@@ -30,6 +32,6 @@ See [RENDER.md](RENDER.md) and the root [render.yaml](../render.yaml). With `roo
 
 ## Tests
 
-`npm test` runs unit and HTTP tests without MySQL. From the repository root, `npm run test:db:up` starts the dedicated local MySQL 8.4.11 container, then `npm run test:integration` creates isolated schemas and applies the real migration. `npm run test:db:prepare` keeps a new schema with basic fixtures for Workbench. See [test/README.md](test/README.md) for isolation, cleanup and the CI workflow.
+`npm test` runs unit, HTTP and OpenAPI contract tests without MySQL. `npm run check --workspace backend` checks syntax for every JavaScript file under `src/` and `scripts/`. From the repository root, `npm run test:db:up` starts the dedicated local MySQL 8.4.11 container, then `npm run test:integration` creates isolated schemas and applies the real migration. `npm run test:db:prepare` keeps a new schema with basic fixtures for Workbench. See [test/README.md](test/README.md) for isolation, cleanup and the CI workflow.
 
 The proposed MySQL schema is in [`migrations/`](migrations/README.md). See the [database design](../Tai%20lieu%20he%20thong/Thiet%20ke%20CSDL/README.md) for the ERD, workbook analysis and required transaction rules. Migrations are not run at API startup.

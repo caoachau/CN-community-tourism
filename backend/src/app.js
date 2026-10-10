@@ -1,31 +1,38 @@
 import cors from 'cors';
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
+import { openApiDocument } from './openapi.js';
+import { AppError } from './shared/errors.js';
+import { errorHandler, notFound, sendSuccess } from './shared/http.js';
+import { logger as defaultLogger } from './shared/logger.js';
+import { requestContext } from './shared/request-context.js';
 
-const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-export function createApp({ checkDatabase } = {}) {
+export function createApp({
+  checkDatabase,
+  logger = defaultLogger,
+  allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean),
+  docsEnabled = process.env.API_DOCS_ENABLED !== 'false',
+  apiRouter,
+} = {}) {
   const app = express();
 
   app.disable('x-powered-by');
+  app.use(requestContext(logger));
   app.use(cors({
     origin(origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error('Origin is not allowed by CORS'));
+      return callback(new AppError('CORS_ORIGIN_DENIED'));
     },
+    exposedHeaders: ['X-Request-Id'],
   }));
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '1mb', type: ['application/json', 'application/*+json'] }));
 
   app.get('/api/health', (_request, response) => {
-    response.status(200).json({
-      success: true,
-      data: {
-        status: 'ok',
-        service: 'community-tourism-api',
-        timestamp: new Date().toISOString(),
-      },
+    response.set('Cache-Control', 'no-store');
+    sendSuccess(response, {
+      status: 'ok',
+      service: 'community-tourism-api',
+      timestamp: new Date().toISOString(),
     });
   });
 
@@ -34,27 +41,23 @@ export function createApp({ checkDatabase } = {}) {
     try {
       if (!checkDatabase) throw new Error('Database checker not configured');
       await checkDatabase();
-      response.status(200).json({ success: true, data: { status: 'ready' } });
-    } catch {
-      response.status(503).json({
-        success: false,
-        error: { code: 'DATABASE_UNAVAILABLE', message: 'Service is not ready' },
-      });
+    } catch (cause) {
+      throw new AppError('DATABASE_UNAVAILABLE', { cause });
     }
+    sendSuccess(response, { status: 'ready' });
   });
 
-  app.use((_request, response) => {
-    response.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Route not found' } });
-  });
+  if (docsEnabled) {
+    app.get('/api/openapi.json', (_request, response) => response.json(openApiDocument));
+    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument, {
+      customSiteTitle: 'Community Tourism API',
+      swaggerOptions: { validatorUrl: null, persistAuthorization: false },
+    }));
+  }
+  if (apiRouter) app.use('/api/v1', apiRouter);
 
-  app.use((error, _request, response, _next) => {
-    const status = error.status ?? 500;
-    console.error(JSON.stringify({ level: 'error', message: 'Request failed', status }));
-    response.status(status).json({
-      success: false,
-      error: { code: status === 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR', message: status === 500 ? 'Internal server error' : error.message },
-    });
-  });
+  app.use(notFound);
+  app.use(errorHandler);
   return app;
 }
 

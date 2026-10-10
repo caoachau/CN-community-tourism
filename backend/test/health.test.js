@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { app, createApp } from '../src/app.js';
+import { createApp } from '../src/app.js';
+import { createLogger } from '../src/shared/logger.js';
+
+const logger = createLogger({ env: { LOG_LEVEL: 'silent' } });
 
 let server;
 let baseUrl;
 
 before(async () => {
-  server = app.listen(0);
+  server = createApp({ logger }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
@@ -40,7 +43,7 @@ test('readiness fails closed without a configured database', async () => {
 
 test('readiness tracks database failures and recovery without leaking details', async () => {
   let unavailable = false;
-  const instance = createApp({ checkDatabase: async () => {
+  const instance = createApp({ logger, checkDatabase: async () => {
     if (unavailable) throw new Error('sensitive-connection-string');
   } }).listen(0);
   await new Promise((resolve) => instance.once('listening', resolve));
