@@ -32,10 +32,10 @@ The YAML contains only non-secret settings and `sync: false` placeholders. Enter
 
 | Variable | Value to supply |
 | --- | --- |
-| `DATABASE_URL` | Current MySQL Service URI copied from the Aiven Console. Use the current password; percent-encode reserved characters if constructing the URI manually. |
+| `DATABASE_URL` | Current MySQL Service URI with database path `/community-tourism-db` after that schema is created. The Console may still show `/defaultdb`; change only the database path. Use the current password; percent-encode reserved characters if constructing the URI manually. |
 | `DB_SSL_CA` | Entire contents of the Aiven project's `ca.pem`, including BEGIN/END lines and real newlines. Paste as a multiline environment value, without surrounding quotes. |
 | `CORS_ORIGIN` | Allowed React Admin origin, such as `http://localhost:5173` while testing locally. Multiple origins are comma-separated; do not include trailing slashes. Flutter native clients do not require a browser origin. |
-| `DB_EXPECTED_DATABASE` | `defaultdb`, already set in YAML; change deliberately if targeting another schema. |
+| `DB_EXPECTED_DATABASE` | `community-tourism-db`, already set in YAML; the schema must be created through the approved migration before API startup. |
 | `DB_POOL_SIZE` | `5`, already set; bounded to 1–10 by the application. |
 | `NODE_ENV` / `NODE_VERSION` | `production` / `22`, already set. |
 

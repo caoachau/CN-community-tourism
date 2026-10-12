@@ -24,7 +24,7 @@ services:
       - key: DB_POOL_SIZE
         value: "5"
       - key: DB_EXPECTED_DATABASE
-        value: defaultdb
+        value: community-tourism-db
       - key: DATABASE_URL
         sync: false
       - key: DB_SSL_CA

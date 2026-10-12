@@ -12,6 +12,7 @@
 *.mobileprovision
 **/android/key.properties
 /Tai lieu he thong/env.docx
+/Tai lieu he thong/
 
 # Node.js / React / Vite (applies at any workspace depth).
 node_modules/

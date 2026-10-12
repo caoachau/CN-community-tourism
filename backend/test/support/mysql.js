@@ -87,7 +87,10 @@ export async function createTestDatabase(env = process.env) {
     await connection.query('CREATE TABLE __test_harness (id INT PRIMARY KEY, run_token CHAR(64) NOT NULL, migration_hash CHAR(64) NULL) ENGINE=InnoDB');
     await connection.execute('INSERT INTO __test_harness (id, run_token) VALUES (1, ?)', [token]);
     marked = true;
-    const files = (await readdir(migrationsDirectory)).filter((file) => /^\d+_[a-z0-9_]+\.sql$/.test(file)).sort();
+    // Existing fixture suite is the v2 regression baseline. Schema v3 is tested
+    // by the real upgrade runner and the standalone 20-group v3 validator.
+    // A replacement migration must never be concatenated after the old DDL.
+    const files = (await readdir(migrationsDirectory)).filter((file) => file === '001_initial_schema.sql');
     if (!files.length) throw new HarnessError('NO_TEST_MIGRATIONS_FOUND');
     const hash = createHash('sha256');
     let statementCount = 0;

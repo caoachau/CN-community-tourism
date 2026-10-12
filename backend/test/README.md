@@ -75,7 +75,11 @@ Migration preflight hiện hỗ trợ DDL khởi tạo trong repository, tên b�
 
 ## Phạm vi kiểm chứng
 
-Integration suite kiểm tra migration 41 bảng/101 FK/140 CHECK; fixture/rollback; FK khác hộ, slot/tài nguyên; chủ và phiên bản nội dung; công thức giá; kết quả từng hạng mục; một proposal SENT; giữ lịch sử tiền/snapshot; dọn schema; khóa hộ bằng hai connection và tranh unique idempotency.
+Các test schema/transaction và fixture hiện được ghim vào migration `001` để kiểm thử hồi quy thiết kế cũ: 41 bảng/101 FK/140 CHECK; fixture/rollback; FK khác hộ, slot/tài nguyên; chủ và phiên bản nội dung; công thức giá; kết quả từng hạng mục; một proposal SENT; giữ lịch sử tiền/snapshot; dọn schema; khóa hộ bằng hai connection và tranh unique idempotency. `test:db:prepare` vẫn tạo fixture cũ, không đại diện schema 30 bảng đang triển khai trên Aiven.
+
+Suite có 9 ca cho runner `001`: plan không ghi dữ liệu, cờ tạo database, tạo 41 bảng + `schema_migrations`, replay giữ nguyên dữ liệu, advisory lock, checksum lệch, schema chưa có history, DDL dở dang và phát hiện thiếu FK. Thêm 4 ca trong `schema-replacement.test.js` kiểm chuyển sang 30 bảng qua migration `002`: chuyển/replay, chặn nguồn có dữ liệu, phát hiện ghi phát sinh trước khóa, và khôi phục khi lỗi xác minh sau chuyển đổi. Tổng cộng **27 integration test**. Runner được kiểm tra với ANSI/strict; chỉ chạy trên loopback local, không seed trong bước migration. Không dùng `test:db:prepare` để triển khai Aiven.
+
+Thiết kế hiện tại có thêm 20 nhóm kiểm tra DDL và prototype transaction: chạy `node backend/test/design/validate.mjs` từ thư mục gốc sau khi MySQL test đã chạy. Script chỉ dùng MySQL cục bộ, đọc `Tai lieu he thong/Thiet ke CSDL/schema.sql`; kết quả và metadata được xuất vào `tmp/schema-validation/` đã Git-ignore. Những prototype này chưa thay thế kiểm thử các API nghiệp vụ thực tế.
 
 Đây là kiểm thử ràng buộc database và cơ sở transaction. Các endpoint booking, kiểm tra sức chứa, lịch trùng, xác nhận phương án, quyền actor, thu hồi phê duyệt và báo cáo vẫn cần kiểm thử qua implementation nghiệp vụ sau này. Việc suite đạt không có nghĩa 12 kịch bản nghiệm thu nghiệp vụ đã hoàn thành.
 
