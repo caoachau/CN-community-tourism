@@ -1,0 +1,154 @@
+{
+  "provider": "Google Stitch",
+  "project": "8010779736470767319",
+  "screens": [
+    {
+      "label": "m1",
+      "name": "projects/8010779736470767319/screens/1a82832709cf4d0087670125ff652bd6",
+      "title": "Màn hình chào - Khám phá Việt Nam thật khác"
+    },
+    {
+      "label": "m2",
+      "name": "projects/8010779736470767319/screens/a0a649c623a2476a856c2bb6e05edac4",
+      "title": "Trang chủ Khám phá - Du lịch Sa Pa"
+    },
+    {
+      "label": "m3",
+      "name": "projects/8010779736470767319/screens/2812fa44d0f24816aaa86c2e607da026",
+      "title": "Kết quả tìm kiếm - Du lịch cộng đồng Sa Pa"
+    },
+    {
+      "label": "m4",
+      "name": "projects/8010779736470767319/screens/1bb9922dfe514dd68228d095428e4cee",
+      "title": "Chi tiết Homestay Nhà của Pao"
+    },
+    {
+      "label": "m5",
+      "name": "projects/8010779736470767319/screens/5f897363177a4e80b7606f893c285a2f",
+      "title": "Bản đồ khám phá Sa Pa"
+    },
+    {
+      "label": "m6",
+      "name": "projects/8010779736470767319/screens/4f71e114f34f4fc6beadc18cf9020ea7",
+      "title": "Đặt phòng - Homestay Nhà của Pao"
+    },
+    {
+      "label": "m7",
+      "name": "projects/8010779736470767319/screens/37f8bbd00a074955b6b78062923f3932",
+      "title": "Thanh toán - Homestay Nhà của Pao"
+    },
+    {
+      "label": "m8",
+      "name": "projects/8010779736470767319/screens/503b030d91264089a298ca4a19f9c047",
+      "title": "Tin nhắn với chủ hộ Vàng Thị Pao"
+    },
+    {
+      "label": "m9",
+      "name": "projects/8010779736470767319/screens/cd7999bec57244c2a3dd63ced3af9ac8",
+      "title": "Hồ sơ cá nhân - Du lịch cộng đồng Sa Pa"
+    },
+    {
+      "label": "m10",
+      "name": "projects/8010779736470767319/screens/57b497968bed4bcd83c310da865f0a73",
+      "title": "Quản lý chủ hộ - Homestay Nhà của Pao"
+    }
+  ],
+  "assets": [
+    {
+      "asset": "welcome.jpg",
+      "screen": "m1",
+      "description": "Ruộng bậc thang Sa Pa Tây Bắc"
+    },
+    {
+      "asset": "terraces.jpg",
+      "screen": "m2",
+      "description": "Ruộng bậc thang Sa Pa"
+    },
+    {
+      "asset": "pao.jpg",
+      "screen": "m2",
+      "description": "Homestay Nhà của Pao"
+    },
+    {
+      "asset": "food.jpg",
+      "screen": "m2",
+      "description": "Trải nghiệm ẩm thực cùng gia đình người Mông"
+    },
+    {
+      "asset": "trek.jpg",
+      "screen": "m2",
+      "description": "Trekking bản làng"
+    },
+    {
+      "asset": "craft.jpg",
+      "screen": "m2",
+      "description": "Làm thổ cẩm truyền thống"
+    },
+    {
+      "asset": "pao_landscape.jpg",
+      "screen": "m3",
+      "description": "Homestay Nhà của Pao giữa thung lũng Tả Van"
+    },
+    {
+      "asset": "eco.jpg",
+      "screen": "m3",
+      "description": "Tả Van Eco Homestay bungalow gỗ bên bờ suối"
+    },
+    {
+      "asset": "spa.jpg",
+      "screen": "m3",
+      "description": "Lá Dao Spa và Homestay tắm lá thuốc ngắm mây"
+    },
+    {
+      "asset": "detail.jpg",
+      "screen": "m4",
+      "description": "Homestay Nhà của Pao trên triền núi Tả Van"
+    },
+    {
+      "asset": "host.jpg",
+      "screen": "m4",
+      "description": "Avatar Vàng Thị Pao"
+    },
+    {
+      "asset": "bedroom.jpg",
+      "screen": "m4",
+      "description": "Phòng ngủ nệm ấm cúng"
+    },
+    {
+      "asset": "valley.jpg",
+      "screen": "m4",
+      "description": "Phong cảnh thung lũng Tả Van"
+    },
+    {
+      "asset": "woodhouse.jpg",
+      "screen": "m4",
+      "description": "Kiến trúc nhà gỗ truyền thống"
+    },
+    {
+      "asset": "room.jpg",
+      "screen": "m6",
+      "description": "Phòng cộng đồng"
+    },
+    {
+      "asset": "private_room.jpg",
+      "screen": "m6",
+      "description": "Phòng riêng"
+    },
+    {
+      "asset": "customer.jpg",
+      "screen": "m9",
+      "description": "Ảnh đại diện Nguyễn Thị Mai"
+    },
+    {
+      "asset": "guest2.jpg",
+      "screen": "m10",
+      "description": "Trần Minh Đức"
+    },
+    {
+      "asset": "guest3.jpg",
+      "screen": "m10",
+      "description": "Lê Hoàng Anh"
+    }
+  ],
+  "notes": "User-provided UI reference; local demo data only. No API credentials included."
+}

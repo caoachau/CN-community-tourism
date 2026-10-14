@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="flutter_khach"
+        android:label="Du lịch cộng đồng"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

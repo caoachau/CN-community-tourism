@@ -1,14 +1,20 @@
-# Mobile app: Flutter toolchain blocker
+# Giao diện Flutter theo thiết kế Stitch
 
-The development machine was checked on 2026-09-29. Node.js 22.14.0, npm 10.9.2, Git 2.47.1, and Java 25.0.2 are present. Flutter, Dart, and `adb` are not available on PATH; `ANDROID_HOME` and `ANDROID_SDK_ROOT` are unset, and Android SDK folders were not found in the common locations checked. Therefore a debug APK cannot be built or verified yet. Do not begin customer/household feature implementation until this blocker is cleared.
+- `flutter_khach`: mở màn chào M1, đi vào giao diện khách M2–M9.
+- `flutter_ho`: mở giao diện quản lý chủ hộ M10.
+- `tourism_ui`: mã giao diện, ảnh và font dùng chung; nguồn của 10 màn ghi trong `design-source.json`.
 
-Install Flutter stable and the Android SDK (Android SDK Platform, Platform-Tools, Build-Tools, and command-line tools), then configure `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) and add Flutter/Android tools to PATH. Reopen the terminal and verify with:
+Chạy trong thư mục app tương ứng:
 
 ```powershell
-flutter doctor -v
-flutter doctor --android-licenses
-flutter create . --platforms=android
-flutter build apk --debug
+& 'F:\dev\flutter\bin\flutter.bat' pub get
+& 'F:\dev\flutter\bin\flutter.bat' run
 ```
 
-Record `flutter doctor -v` and a successful APK build before marking mobile toolchain verification complete. Java is currently 25.0.2; if Flutter/Gradle reports an unsupported JDK, install a compatible JDK and set `JAVA_HOME` to it.
+Vào Cài đặt ở màn Cá nhân hoặc Chủ hộ → Xem 10 màn hình Stitch để kiểm tra từng màn. Hai app chạy độc lập; có thể chuyển giao diện khách/chủ hộ trong cùng phiên demo.
+
+Dữ liệu lưu trong bộ nhớ, đặt lại khi khởi động lại; chưa kết nối API/Aiven, đăng nhập, bản đồ thật, chat realtime hoặc thanh toán gateway. Màn thanh toán dùng giao dịch trực tiếp với hộ, chưa thu phí nền tảng. Mã giảm giá và đánh giá mẫu chỉ minh họa giao diện.
+
+Kiểm tra: `dart analyze` và `flutter test` trong cả `tourism_ui`, `flutter_khach`, `flutter_ho`. Build Android: `flutter build apk --debug`; build web xem thử: `flutter build web --no-web-resources-cdn --no-wasm-dry-run`.
+
+API key Stitch không được đưa vào mã nguồn hay cấu hình ứng dụng. Ảnh lấy từ thiết kế người dùng cung cấp; font Plus Jakarta Sans và Playfair Display kèm giấy phép OFL trong `tourism_ui/assets/fonts`.

@@ -44,6 +44,7 @@ app.*.map.json
 
 # Android local SDK, build outputs and signing configuration.
 .gradle/
+.kotlin/
 **/android/local.properties
 **/android/captures/
 .cxx/

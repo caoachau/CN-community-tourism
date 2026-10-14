@@ -1,11 +1,11 @@
 {
-    "name": "flutter_khach",
-    "short_name": "flutter_khach",
+    "name": "Du lịch cộng đồng - Khám phá",
+    "short_name": "Du lịch cộng đồng - Khám phá",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#064e3b",
+    "theme_color": "#064e3b",
+    "description": "Giao diện demo theo thiết kế Stitch M1-M10.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
