@@ -8,7 +8,44 @@ Sau khi cấu hình database/TLS và chạy `npm run dev:backend` từ root:
 - OpenAPI 3.0.3: `http://localhost:5000/api/openapi.json`.
 - Liveness: `GET /api/health`; readiness kiểm tra MySQL/TLS: `GET /api/ready`.
 
-Swagger hiện mô tả hai endpoint vận hành đã triển khai. Chưa có API đăng nhập, booking hoặc phân quyền. Schema/mã lỗi dùng chung là nền cho các module tiếp theo. OpenAPI được khai báo trong `src/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài.
+Swagger mô tả health/readiness và năm API xác thực dưới `/api/v1/auth`. Booking và luồng mở hộ dân sẽ bổ sung ở module riêng. OpenAPI được khai báo trong `src/openapi.js` và `src/auth/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài.
+
+## Đăng ký, đăng nhập và phiên JWT
+
+| API | Dữ liệu gửi | Kết quả |
+| --- | --- | --- |
+| `POST /api/v1/auth/register` | `email`, `password`, `displayName`, `phone` tùy chọn | 201; tài khoản CUSTOMER và cặp token |
+| `POST /api/v1/auth/login` | `email`, `password` | 200; hỗ trợ CUSTOMER, HOUSEHOLD, ADMIN |
+| `POST /api/v1/auth/refresh` | `refreshToken` | 200; thay refresh token và cấp access JWT mới |
+| `GET /api/v1/auth/me` | Header `Authorization: Bearer <accessToken>` | Tài khoản và vai trò hiện tại |
+| `POST /api/v1/auth/logout` | Cùng header Bearer | Thu hồi phiên hiện tại; thiết bị khác giữ phiên riêng |
+
+Đăng ký công khai luôn tạo CUSTOMER, không tạo hộ dân và không nhận trường `role`/`status`. Mở hộ dân và chuyển quyền là bước riêng, không thuộc task xác thực này. Email được trim và chuyển chữ thường; mật khẩu giữ nguyên, dài 15–128 ký tự khi đăng ký, không bắt buộc quy tắc viết hoa/ký tự đặc biệt. Đăng nhập nhận mật khẩu 1–128 ký tự để không chặn tài khoản cũ. Tên hiển thị tối đa 150 ký tự; ID MySQL luôn là chuỗi.
+
+Mật khẩu dùng scrypt với salt ngẫu nhiên riêng, `N=32768, r=8, p=3`, giới hạn hai phép tính đồng thời. Cấu hình này dùng phương án khoảng 32 MiB trong [hướng dẫn lưu mật khẩu OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html). Không lưu hoặc log mật khẩu rõ. Đăng nhập sai mật khẩu, email không tồn tại hoặc tài khoản bị khóa cùng trả `INVALID_CREDENTIALS` (401); đăng ký trùng email trả `EMAIL_ALREADY_EXISTS` (409).
+
+Access JWT dùng HS256, tối đa 15 phút, kiểm tra chữ ký, issuer, audience, loại token, thời hạn và claim bắt buộc. JWT không chứa email, số điện thoại hoặc mật khẩu. `JWT_SECRET` bắt buộc, ít nhất 32 byte; `JWT_ISSUER`/`JWT_AUDIENCE` mặc định `community-tourism-api`/`community-tourism-clients`. Render Blueprint sinh secret; local cấu hình qua `.env` được Git bỏ qua.
+
+Refresh token là 32 byte ngẫu nhiên, mã hóa base64url. MySQL chỉ lưu SHA-256 trong `auth_sessions.token_hash`. Phiên có hạn cố định bảy ngày; refresh đổi token một lần trong transaction, không kéo dài hạn ban đầu. Chỉ một request thắng nếu hai request cùng dùng token cũ. Client phải tuần tự hóa refresh, thay cả hai token sau thành công và đăng nhập lại khi phiên hết hạn/thu hồi. Access JWT không được dùng thay refresh token.
+
+Mỗi request được bảo vệ kiểm tra phiên và tài khoản hiện tại trong MySQL. Đăng xuất thu hồi cả access JWT và refresh token của phiên đó ngay; khóa tài khoản hoặc đổi vai trò có hiệu lực ở request tiếp theo. Mất database không được bỏ qua kiểm tra xác thực. API trả `Cache-Control: no-store`; khi nối API, ứng dụng Flutter cần lưu token bằng kho bảo mật của hệ điều hành. Swagger dùng nút **Authorize** với access token và không giữ token sau khi tải lại trang.
+
+Middleware tại `src/auth/middleware.js`:
+
+- `authenticate(service)` xác thực Bearer và lưu `{ user, sessionId }` tại `res.locals.auth`.
+- `requireRoles('CUSTOMER')` cho CUSTOMER và HOUSEHOLD. ADMIN không tự có quyền xử lý booking/tiền của hộ.
+- `requireHouseholdOwner(service, resolveId, { requireApproved })` kiểm tra chủ sở hữu thực tế. Với đối tượng con, `resolveId` phải lấy household ID từ đối tượng backend đã tải, không tin ID hộ do client tự khai.
+- Hộ DRAFT/REVOKED vẫn dùng chức năng khách và có thể quản lý nghĩa vụ cũ. `requireApproved: true` dành cho nhận cam kết mới. Các command booking sau này vẫn phải khóa và kiểm tra lại quyền/trạng thái hộ trong chính transaction ghi dữ liệu; middleware không thay thế bước đó.
+
+Đăng ký/đăng nhập/refresh giới hạn tối đa 60 request/IP/15 phút và 12 request/email/15 phút, trả 429 kèm `Retry-After` khi limiter chặn. Giới hạn email dùng chung các IP. Đây là limiter bộ nhớ cho một instance MVP; restart xóa bộ đếm và nhiều instance cần kho giới hạn chung. `TRUST_PROXY_HOPS=0` khi chạy trực tiếp, `1` cho cấu hình Render hiện tại; không đặt khi hạ tầng proxy khác với cấu hình. Giới hạn scrypt có thể trả 429 sớm hơn khi máy bận.
+
+ADMIN chỉ được tạo qua công cụ nội bộ, không qua API đăng ký. Người vận hành đặt tạm `ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_NAME`, `ADMIN_BOOTSTRAP_PASSWORD` trong môi trường riêng rồi chạy từ root:
+
+```powershell
+npm run auth:create-admin --workspace backend -- --apply --confirm-database=community-tourism-db
+```
+
+Công cụ xác minh TLS/database trước khi ghi, chỉ tạo tài khoản ADMIN mới, không nâng quyền hoặc đặt lại mật khẩu của email đã có. Xóa các biến bootstrap khỏi môi trường sau khi dùng. Công cụ này **không chạy trong startup/build/migration/seed**; task xác thực không chạy nó trên Aiven.
 
 `API_DOCS_ENABLED=true` bật cả UI và OpenAPI JSON; `false` tắt cả hai. Mặc định bật, kể cả cấu hình Render hiện tại. URL server trong OpenAPI là `/`, nên dùng cùng hostname với API, không lấy hostname từ header của khách. OpenAPI JSON trả trực tiếp tài liệu theo chuẩn, không bọc `success/data`; Swagger và tài nguyên tĩnh cũng không dùng envelope nghiệp vụ.
 
@@ -81,7 +118,8 @@ apiRouter.get('/items', validate({ query: paginationSchema }), async (_req, res)
 | HTTP | Mã | Trường hợp |
 | --- | --- | --- |
 | 400 | `INVALID_JSON`, `INVALID_REQUEST` | JSON sai cú pháp, URL/request không hợp lệ |
-| 401 | `UNAUTHENTICATED` | Chưa xác thực |
+| 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | Phiên/token không hợp lệ hoặc đăng nhập thất bại |
+| 409 | `EMAIL_ALREADY_EXISTS` | Email đăng ký đã có tài khoản |
 | 403 | `FORBIDDEN`, `CORS_ORIGIN_DENIED`, `HOUSEHOLD_NOT_APPROVED` | Không có quyền/origin/hộ không được nhận cam kết mới |
 | 404 | `NOT_FOUND` | Không tìm thấy route hoặc đối tượng |
 | 409 | `INVALID_STATE`, `HOLD_EXPIRED`, `STALE_VERSION` | Xung đột trạng thái/thời hạn/phiên bản |
@@ -89,7 +127,7 @@ apiRouter.get('/items', validate({ query: paginationSchema }), async (_req, res)
 | 413 | `PAYLOAD_TOO_LARGE` | Body vượt giới hạn |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Sai loại nội dung/encoding/charset |
 | 422 | `VALIDATION_ERROR` | JSON đọc được nhưng sai schema |
-| 429 | `RATE_LIMITED` | Dành cho middleware giới hạn sau này |
+| 429 | `RATE_LIMITED` | Vượt giới hạn xác thực hoặc máy đang đủ hai phép tính scrypt |
 | 503 | `DATABASE_UNAVAILABLE` | Readiness không kiểm chứng được database |
 | 500 | `INTERNAL_ERROR` | Lỗi chưa được xử lý hoặc lỗi lập trình |
 

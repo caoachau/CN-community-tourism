@@ -40,9 +40,14 @@ function assertContract(schema, body) {
   assert.equal(validator(body), true, JSON.stringify(validator.errors));
 }
 
-test('OpenAPI is valid with resolved references and documents only implemented system operations', async () => {
+test('OpenAPI is valid with resolved references and documents implemented system and auth operations', async () => {
   assert.equal(document.openapi, '3.0.3');
-  assert.deepEqual(Object.keys(document.paths), ['/api/health', '/api/ready']);
+  assert.deepEqual(Object.keys(document.paths).sort(), [
+    '/api/health', '/api/ready', '/api/v1/auth/register', '/api/v1/auth/login',
+    '/api/v1/auth/refresh', '/api/v1/auth/me', '/api/v1/auth/logout',
+  ].sort());
+  assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
+  assert.deepEqual(document.paths['/api/v1/auth/register'].post.security, []);
   assert.deepEqual(document.components.schemas.ErrorCode.enum, Object.keys(ERROR_DEFINITIONS));
   const response = await fetch(`${baseUrl}/api/openapi.json`);
   assert.equal(response.status, 200);

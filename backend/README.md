@@ -16,11 +16,11 @@ The API listens on `http://localhost:5000`. Verify it with:
 Invoke-RestMethod http://localhost:5000/api/health
 ```
 
-Fill `DATABASE_URL` with the current Aiven URI and configure `DB_SSL_CA_PATH` before starting. Credentials stay in the ignored `.env`. The backend uses `mysql2/promise` with CA and hostname verification; startup requires a successful TLS/database check.
+Fill `DATABASE_URL` with the current Aiven URI and configure `DB_SSL_CA_PATH` before starting. Set `JWT_SECRET` to a unique random secret of at least 32 bytes (for example, 48 random bytes encoded as base64url); an empty/placeholder key prevents startup. Credentials stay in the ignored `.env`. The backend uses `mysql2/promise` with CA and hostname verification; startup requires a successful TLS/database check.
 
 `/api/health` reports process liveness. `/api/ready` verifies the database connection and returns 200 or a generic 503 without exposing connection details. Shutdown closes HTTP and the database pool.
 
-Swagger UI is available at `http://localhost:5000/api/docs/`; the OpenAPI document is at `/api/openapi.json`. See [API.md](API.md) for shared Zod validation, error codes/envelopes, request IDs and JSON logging. Configure `API_DOCS_ENABLED=false` to disable both documentation endpoints and `LOG_LEVEL` to control verbosity. Business routers will be mounted under `/api/v1`; Swagger currently documents the implemented health/readiness operations.
+Swagger UI is available at `http://localhost:5000/api/docs/`; the OpenAPI document is at `/api/openapi.json`. See [API.md](API.md) for authentication, shared Zod validation, error codes/envelopes, request IDs and JSON logging. Configure `API_DOCS_ENABLED=false` to disable both documentation endpoints and `LOG_LEVEL` to control verbosity. Authentication is mounted under `/api/v1/auth` and documented alongside health/readiness.
 
 `npm run db:check:tls --workspace backend` also checks that an unrelated CA and a wrong TLS hostname are rejected. Both commands only inspect the connection and set its session timezone; neither runs migrations, seeds or business writes.
 

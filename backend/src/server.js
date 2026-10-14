@@ -2,6 +2,9 @@ import { createApp } from './app.js';
 import { createDatabase } from './database.js';
 import { DatabaseConfigError, databaseErrorCode } from './config/database.js';
 import { logger } from './shared/logger.js';
+import { authOptions, AuthConfigError } from './config/auth.js';
+import { createAuthRepository } from './auth/repository.js';
+import { createAuthService } from './auth/service.js';
 
 const port = Number(process.env.PORT ?? '5000');
 let database;
@@ -13,17 +16,19 @@ const startupDeadline = setTimeout(() => {
 
 try {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new DatabaseConfigError('INVALID_PORT');
+  const options = authOptions();
   database = createDatabase();
   const tls = await database.check();
   logger.info({ event: 'database_verified', driver: 'mysql2/promise', ...tls }, 'Database TLS verified');
-  const app = createApp({ checkDatabase: () => database.check(), logger });
+  const authService = createAuthService({ repository: createAuthRepository(database), options });
+  const app = createApp({ checkDatabase: () => database.check(), logger, authService, trustProxy: options.trustProxy });
   server = await new Promise((resolve, reject) => {
     const listener = app.listen(port, '0.0.0.0', () => resolve(listener));
     listener.once('error', reject);
   });
   logger.info({ event: 'server_started', port }, 'API listening');
 } catch (error) {
-  logger.error({ event: 'startup_failed', code: databaseErrorCode(error) }, 'Startup failed');
+  logger.error({ event: 'startup_failed', code: error instanceof AuthConfigError ? error.code : databaseErrorCode(error) }, 'Startup failed');
   try {
     await database?.close();
   } catch {

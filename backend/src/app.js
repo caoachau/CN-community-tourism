@@ -6,6 +6,7 @@ import { AppError } from './shared/errors.js';
 import { errorHandler, notFound, sendSuccess } from './shared/http.js';
 import { logger as defaultLogger } from './shared/logger.js';
 import { requestContext } from './shared/request-context.js';
+import { createAuthRouter } from './auth/router.js';
 
 export function createApp({
   checkDatabase,
@@ -13,10 +14,13 @@ export function createApp({
   allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean),
   docsEnabled = process.env.API_DOCS_ENABLED !== 'false',
   apiRouter,
+  authService,
+  trustProxy = 0,
 } = {}) {
   const app = express();
 
   app.disable('x-powered-by');
+  app.set('trust proxy', trustProxy);
   app.use(requestContext(logger));
   app.use(cors({
     origin(origin, callback) {
@@ -54,6 +58,7 @@ export function createApp({
       swaggerOptions: { validatorUrl: null, persistAuthorization: false },
     }));
   }
+  if (authService) app.use('/api/v1/auth', createAuthRouter(authService));
   if (apiRouter) app.use('/api/v1', apiRouter);
 
   app.use(notFound);

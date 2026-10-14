@@ -41,11 +41,37 @@ export async function inspectConnection(connection, expectedDatabase) {
   };
 }
 
+export function databaseAccess(pool) {
+  async function withConnection(work) {
+    const connection = await acquireConnection(pool);
+    try {
+      await connection.query({ sql: "SET SESSION time_zone = '+00:00'", timeout: 5000 });
+      return await work(connection);
+    } finally { connection.release(); }
+  }
+  return {
+    withConnection,
+    transaction: (work) => withConnection(async (connection) => {
+      await connection.beginTransaction();
+      try {
+        const result = await work(connection);
+        await connection.commit();
+        return result;
+      } catch (error) {
+        try { await connection.rollback(); }
+        catch { connection.destroy(); }
+        throw error;
+      }
+    }),
+  };
+}
+
 export function createDatabase(env = process.env) {
   const options = databaseOptions(env);
   const pool = mysql.createPool(options);
   let currentCheck;
   return {
+    ...databaseAccess(pool),
     // Coalesce concurrent probes rather than filling the pool from health traffic.
     check() {
       currentCheck ??= (async () => {

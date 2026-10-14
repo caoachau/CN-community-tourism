@@ -4,6 +4,8 @@ export const ERROR_DEFINITIONS = Object.freeze(Object.fromEntries(Object.entries
   INVALID_REQUEST: [400, 'Invalid request'],
   VALIDATION_ERROR: [422, 'Request validation failed'],
   UNAUTHENTICATED: [401, 'Authentication is required'],
+  INVALID_CREDENTIALS: [401, 'Email or password is incorrect'],
+  EMAIL_ALREADY_EXISTS: [409, 'An account with this email already exists'],
   FORBIDDEN: [403, 'You do not have permission to perform this action'],
   CORS_ORIGIN_DENIED: [403, 'Origin is not allowed'],
   HOUSEHOLD_NOT_APPROVED: [403, 'Household is not approved to accept new commitments'],

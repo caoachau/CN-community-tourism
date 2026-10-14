@@ -1,4 +1,5 @@
 import { ERROR_DEFINITIONS } from './shared/errors.js';
+import { authOpenApi } from './auth/openapi.js';
 
 const reference = (name) => ({ $ref: `#/components/schemas/${name}` });
 const requestIdHeader = {
@@ -17,18 +18,24 @@ const successSchema = (data) => ({
   properties: { success: { type: 'boolean', enum: [true] }, data, meta: reference('ResponseMeta') },
 });
 
+const auth = authOpenApi({ reference, jsonResponse, successSchema });
+
 export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'Community Tourism API',
     version: '0.1.0',
-    description: 'API nền cho nền tảng du lịch cộng đồng. Hiện có health/readiness. '
-      + 'API nghiệp vụ sẽ dùng /api/v1 và được bổ sung khi triển khai. '
+    description: 'API nền cho nền tảng du lịch cộng đồng: health/readiness và xác thực JWT cho ba vai trò. '
+      + 'Đăng ký công khai tạo CUSTOMER; mở hộ dân là luồng riêng. API nghiệp vụ dùng /api/v1. '
       + 'Các mã lỗi dùng chung không có nghĩa những chức năng tương ứng đã được triển khai.',
   },
   servers: [{ url: '/', description: 'Same origin as the API, including Render' }],
-  tags: [{ name: 'System', description: 'Process and database readiness checks' }],
+  tags: [
+    { name: 'System', description: 'Process and database readiness checks' },
+    { name: 'Authentication', description: 'CUSTOMER signup; CUSTOMER, HOUSEHOLD and ADMIN sessions' },
+  ],
   paths: {
+    ...auth.paths,
     '/api/health': {
       get: {
         operationId: 'getHealth',
@@ -69,7 +76,9 @@ export const openApiDocument = {
     },
   },
   components: {
+    securitySchemes: { BearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
     schemas: {
+      ...auth.schemas,
       ResponseMeta: {
         type: 'object',
         required: ['requestId'],

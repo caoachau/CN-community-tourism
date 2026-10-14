@@ -5,7 +5,7 @@ const levels = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'sil
 const sensitiveKeys = [
   'password', 'passwordHash', 'password_hash', 'token', 'accessToken', 'refreshToken',
   'access_token', 'refresh_token', 'authorization', 'cookie', 'apiKey', 'api_key',
-  'secret', 'privateKey', 'connectionString', 'DATABASE_URL', 'databaseUrl',
+  'secret', 'JWT_SECRET', 'ADMIN_BOOTSTRAP_PASSWORD', 'privateKey', 'connectionString', 'DATABASE_URL', 'databaseUrl',
   'DB_SSL_CA', 'DB_SSL_CA_PATH', 'sql', 'sqlMessage', 'body', 'headers',
   'req', 'res', 'request', 'response',
 ];

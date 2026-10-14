@@ -108,7 +108,7 @@ test('pool timeout releases a connection that arrives after its caller timed out
 test('server fails closed before listening when DB configuration is missing', () => {
   const result = spawnSync(process.execPath, ['src/server.js'], {
     cwd: fileURLToPath(new URL('../', import.meta.url)),
-    env: { ...process.env, DATABASE_URL: '', NODE_TLS_REJECT_UNAUTHORIZED: '1', PORT: '5000' },
+    env: { ...process.env, DATABASE_URL: '', NODE_TLS_REJECT_UNAUTHORIZED: '1', PORT: '5000', JWT_SECRET: 'test-only-jwt-signing-key-at-least-32-bytes' },
     encoding: 'utf8', timeout: 10_000,
   });
   assert.equal(result.status, 1);

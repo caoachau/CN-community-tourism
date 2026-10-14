@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "auth:create-admin": "node --env-file-if-exists=.env scripts/create-admin.js",
     "dev": "node --env-file-if-exists=.env --watch src/server.js",
     "start": "node --env-file-if-exists=.env src/server.js",
     "db:check": "node --env-file-if-exists=.env scripts/check-database.js",
@@ -22,6 +23,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.2.1",
+    "jose": "6.2.12",
     "mysql2": "3.24.5",
     "pino": "10.4.0",
     "swagger-ui-express": "5.0.1",

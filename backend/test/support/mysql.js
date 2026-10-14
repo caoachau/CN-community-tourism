@@ -3,6 +3,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { testDatabaseOptions, quoteTestSchema, HarnessError } from './config.js';
 import { databaseErrorCode } from '../../src/config/database.js';
+import { parseMigration } from '../../src/migrations.js';
 
 const migrationsDirectory = new URL('../../migrations/', import.meta.url);
 
@@ -25,7 +26,8 @@ export function migrationStatements(source) {
   return statements;
 }
 
-export async function createTestDatabase(env = process.env) {
+export async function createTestDatabase(env = process.env, { schema = 'legacy' } = {}) {
+  if (!['legacy', 'current'].includes(schema)) throw new HarnessError('INVALID_TEST_SCHEMA_VERSION');
   const options = testDatabaseOptions(env);
   const name = `ctp_test_${process.pid}_${randomBytes(8).toString('hex')}`;
   const quoted = quoteTestSchema(name);
@@ -87,17 +89,17 @@ export async function createTestDatabase(env = process.env) {
     await connection.query('CREATE TABLE __test_harness (id INT PRIMARY KEY, run_token CHAR(64) NOT NULL, migration_hash CHAR(64) NULL) ENGINE=InnoDB');
     await connection.execute('INSERT INTO __test_harness (id, run_token) VALUES (1, ?)', [token]);
     marked = true;
-    // Existing fixture suite is the v2 regression baseline. Schema v3 is tested
-    // by the real upgrade runner and the standalone 20-group v3 validator.
-    // A replacement migration must never be concatenated after the old DDL.
-    const files = (await readdir(migrationsDirectory)).filter((file) => file === '001_initial_schema.sql');
+    // Preserve the legacy fixture baseline. Auth uses the current DDL in a new,
+    // empty owned schema; never concatenate a replacement after the old DDL.
+    const files = (await readdir(migrationsDirectory)).filter((file) => file ===
+      (schema === 'current' ? '002_compact_v3.sql' : '001_initial_schema.sql'));
     if (!files.length) throw new HarnessError('NO_TEST_MIGRATIONS_FOUND');
     const hash = createHash('sha256');
     let statementCount = 0;
     for (const file of files) {
       const source = await readFile(new URL(file, migrationsDirectory), 'utf8');
       hash.update(file).update(source);
-      for (const sql of migrationStatements(source)) {
+      for (const sql of schema === 'current' ? parseMigration(source, { jsonLiterals: true }) : migrationStatements(source)) {
         try { await connection.query(sql); } catch (error) {
           // No credentials, full SQL or input row values in the surfaced error.
           throw new HarnessError(`TEST_MIGRATION_FAILED_${file}_${statementCount + 1}_${error.code ?? 'UNKNOWN'}`);

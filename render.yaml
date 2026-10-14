@@ -21,6 +21,14 @@ services:
         value: info
       - key: API_DOCS_ENABLED
         value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ISSUER
+        value: community-tourism-api
+      - key: JWT_AUDIENCE
+        value: community-tourism-clients
+      - key: TRUST_PROXY_HOPS
+        value: "1"
       - key: DB_POOL_SIZE
         value: "5"
       - key: DB_EXPECTED_DATABASE
