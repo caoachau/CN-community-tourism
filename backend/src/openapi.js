@@ -33,6 +33,7 @@ export const openApiDocument = {
   tags: [
     { name: 'System', description: 'Process and database readiness checks' },
     { name: 'Authentication', description: 'CUSTOMER signup; CUSTOMER, HOUSEHOLD and ADMIN sessions' },
+    { name: 'Administration', description: 'Platform account administration; requires the current ADMIN role' },
   ],
   paths: {
     ...auth.paths,

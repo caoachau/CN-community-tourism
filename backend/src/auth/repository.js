@@ -1,4 +1,5 @@
 import { AppError } from '../shared/errors.js';
+import { ownershipRule } from './ownership.js';
 
 const fields = 'id, email, phone, display_name, password_hash, role, status, disabled_at';
 const execute = (connection, sql, values = []) => connection.execute({ sql, timeout: 5000 }, values);
@@ -37,10 +38,30 @@ function queries(connection) {
     async revokeSession(id, userId) {
       await execute(connection, 'UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP(6)) WHERE id = ? AND user_id = ?', [id, userId]);
     },
+    async revokeUserSessions(userId) {
+      const [result] = await execute(connection, 'UPDATE auth_sessions SET revoked_at = UTC_TIMESTAMP(6) WHERE user_id = ? AND revoked_at IS NULL', [userId]);
+      return result.affectedRows;
+    },
+    async setUserStatus(userId, status) {
+      await execute(connection, `UPDATE users SET status = ?, disabled_at = ${status === 'BLOCKED' ? 'COALESCE(disabled_at, UTC_TIMESTAMP(6))' : 'NULL'}, updated_at = UTC_TIMESTAMP(6) WHERE id = ?`, [status, userId]);
+    },
+    async recordAccountStatus(actorId, before, after, reason, correlationId, revokedSessionCount) {
+      await execute(connection, `INSERT INTO activity_events
+        (actor_user_id, actor_type, event_type, entity_type, entity_id, from_status, to_status, before_data, after_data, reason, correlation_id)
+        VALUES (?, 'ADMIN', 'OTHER', 'USER', ?, ?, ?, ?, ?, ?, ?)`, [
+        actorId, after.id, before.status, after.status,
+        JSON.stringify({ status: before.status, disabledAt: before.disabled_at }),
+        JSON.stringify({ status: after.status, disabledAt: after.disabled_at, action: 'ACCOUNT_STATUS_CHANGED', revokedSessionCount }),
+        reason, correlationId,
+      ]);
+    },
     findAuthentication: (id, userId) => first(connection,
-      `SELECT ${fields.split(', ').map((name) => `u.${name}`).join(', ')} FROM users u JOIN auth_sessions s ON s.user_id = u.id
-       WHERE s.id = ? AND u.id = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6)`, [id, userId]),
-    findHousehold: (id) => first(connection, 'SELECT id, owner_user_id, approval_status, archived_at FROM households WHERE id = ?', [id]),
+      `SELECT ${fields.split(', ').map((name) => `u.${name}`).join(', ')},
+       (s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6)) AS session_live
+       FROM users u JOIN auth_sessions s ON s.user_id = u.id WHERE s.id = ? AND u.id = ?`, [id, userId]),
+    findHousehold: (id, lock = false) => first(connection,
+      `SELECT id, owner_user_id, approval_status, archived_at FROM households WHERE id = ?${lock ? ' FOR UPDATE' : ''}`, [id]),
+    findOwnership: (type, id) => first(connection, ownershipRule(type).sql, [id]),
   };
 }
 

@@ -8,7 +8,7 @@ Sau khi cấu hình database/TLS và chạy `npm run dev:backend` từ root:
 - OpenAPI 3.0.3: `http://localhost:5000/api/openapi.json`.
 - Liveness: `GET /api/health`; readiness kiểm tra MySQL/TLS: `GET /api/ready`.
 
-Swagger mô tả health/readiness và năm API xác thực dưới `/api/v1/auth`. Booking và luồng mở hộ dân sẽ bổ sung ở module riêng. OpenAPI được khai báo trong `src/openapi.js` và `src/auth/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài.
+Swagger mô tả health/readiness, năm API xác thực dưới `/api/v1/auth` và API ADMIN khóa/mở khóa tài khoản. Booking và luồng mở hộ dân sẽ bổ sung ở module riêng. OpenAPI được khai báo trong `src/openapi.js` và `src/auth/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài.
 
 ## Đăng ký, đăng nhập và phiên JWT
 
@@ -35,7 +35,36 @@ Middleware tại `src/auth/middleware.js`:
 - `authenticate(service)` xác thực Bearer và lưu `{ user, sessionId }` tại `res.locals.auth`.
 - `requireRoles('CUSTOMER')` cho CUSTOMER và HOUSEHOLD. ADMIN không tự có quyền xử lý booking/tiền của hộ.
 - `requireHouseholdOwner(service, resolveId, { requireApproved })` kiểm tra chủ sở hữu thực tế. Với đối tượng con, `resolveId` phải lấy household ID từ đối tượng backend đã tải, không tin ID hộ do client tự khai.
+- `requireOwnership(service, { resourceType, as, resolveId, requireApproved })` truy vết chủ sở hữu từ MySQL; `resolveId` mặc định lấy `req.params.id`. Kết quả nằm ở `res.locals.ownership`. Loại tài nguyên và chế độ kiểm tra do backend cố định khi khai báo route, không nhận từ request.
 - Hộ DRAFT/REVOKED vẫn dùng chức năng khách và có thể quản lý nghĩa vụ cũ. `requireApproved: true` dành cho nhận cam kết mới. Các command booking sau này vẫn phải khóa và kiểm tra lại quyền/trạng thái hộ trong chính transaction ghi dữ liệu; middleware không thay thế bước đó.
+
+Các chính sách tại `src/auth/policies.js` dùng chung việc xác định tài khoản hoạt động, role và quyền sở hữu. Thiếu phiên/token hợp lệ trả 401 `UNAUTHENTICATED` kèm `WWW-Authenticate: Bearer`; JWT hợp lệ gắn với tài khoản bị khóa/vô hiệu hóa trả 403 `ACCOUNT_BLOCKED`; sai role hoặc sai chủ sở hữu trả 403 `FORBIDDEN`. Login vẫn dùng lỗi 401 chung để không tiết lộ email tồn tại. Header Authorization trùng lặp bị từ chối. API được bảo vệ luôn trả `Cache-Control: no-store`.
+
+| `as` | Quyền kiểm tra | `resourceType` hỗ trợ |
+| --- | --- | --- |
+| `household` | HOUSEHOLD và đúng `households.owner_user_id` | `household`, `room`, `service`, `product`, `article`, `offer`, `resource`, `availabilityBlock`, `serviceSlot`, `slotOffer`, `resourceAssignment`, `resourceRule`, `resourceUsage`, `financialEntry`, `booking`, `scheduleRequest`, `proposal`, `reservationSet`, `bookingItem`, `contentRevision`, `revisionMedia`, `productInquiry` |
+| `customer` | CUSTOMER hoặc HOUSEHOLD và đúng khách sở hữu | `booking`, `scheduleRequest`, `proposal`, `reservationSet`, `bookingItem`, `productInquiry`, `review`, `complaint` |
+| `user` | Đúng user sở hữu, cho cả ba role | `notification` |
+
+Hạng mục được truy ngược qua tập giữ chỗ tới booking/phương án; phiên bản nội dung và ảnh được truy về nội dung gốc. Người tạo, người đăng ảnh, số điện thoại và ID hộ tự khai không thay thế chủ sở hữu. Booking ngoài app có `customer_user_id=NULL` không cấp quyền khách cho người nhập đơn. Bài văn hóa chung không có hộ không được quản lý bằng guard hộ. ADMIN không được tự vượt ownership để xác nhận booking hoặc ghi tiền; route kiểm duyệt riêng dùng quyền ADMIN theo đúng nghiệp vụ. Đối tượng không tồn tại và không thuộc quyền cùng trả `FORBIDDEN` ở guard ownership.
+
+Các guard này là nền để các module phòng/dịch vụ/booking tích hợp khi triển khai API; chưa có endpoint nghiệp vụ cho các module đó. Khi tải dữ liệu sau guard phải giữ điều kiện chủ sở hữu trong truy vấn. Các thao tác ghi phải kiểm tra lại tài khoản, phiên, role, household và đối tượng dưới khóa trong chính transaction, tránh dùng kết quả middleware cũ để ghi dữ liệu. Đây cũng là nguyên tắc kiểm tra từng request và từng quan hệ sở hữu trong [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+
+API quản trị đã triển khai:
+
+```http
+PATCH /api/v1/admin/users/{userId}/status
+Authorization: Bearer <accessToken-cua-admin>
+Content-Type: application/json
+
+{"status":"BLOCKED","reason":"Vi phạm quy định nền tảng"}
+```
+
+Để mở khóa dùng `status: "ACTIVE"`, vẫn bắt buộc lý do 1–2000 ký tự. Chỉ ADMIN hiện hành được gọi; không được tự khóa chính mình. Response có `user` (id, role, status, disabledAt), `changed` và `revokedSessionCount` (số bản ghi phiên chưa thu hồi được thu hồi trong lần gọi này). Không nhận trường `role` hoặc thao tác nâng quyền. User đích không tồn tại trả 404.
+
+Trong một transaction, backend khóa các user theo thứ tự ID số tăng dần, kiểm tra lại tài khoản/role/phiên của ADMIN, cập nhật `users.status` và `disabled_at`, thu hồi mọi phiên của user đích và ghi lịch sử trong `activity_events` (`event_type=OTHER`, `entity_type=USER`, `after_data.action=ACCOUNT_STATUS_CHANGED`). Lịch sử chứa trạng thái trước/sau, người thực hiện, lý do và request ID; không chứa mật khẩu/token. Lỗi ghi lịch sử hoàn tác cả trạng thái và thu hồi phiên. Gửi lặp cùng trạng thái không tạo lịch sử trùng; nếu còn phiên chưa thu hồi khi khóa lại, hệ thống vẫn thu hồi và ghi nhận việc đó.
+
+Mở khóa không phục hồi phiên cũ, khách phải đăng nhập lại. Khóa tài khoản không thay role, phê duyệt hộ, booking, giữ chỗ hoặc dữ liệu thu chi. Thu hồi duyệt hộ là nghiệp vụ khác: tài khoản còn ACTIVE vẫn có quyền khách và xử lý nghĩa vụ cũ trong giới hạn đã chốt. Dùng API quản trị để bảo toàn thu hồi phiên và lịch sử; cập nhật status trực tiếp qua Workbench sẽ bỏ qua các bước này.
 
 Đăng ký/đăng nhập/refresh giới hạn tối đa 60 request/IP/15 phút và 12 request/email/15 phút, trả 429 kèm `Retry-After` khi limiter chặn. Giới hạn email dùng chung các IP. Đây là limiter bộ nhớ cho một instance MVP; restart xóa bộ đếm và nhiều instance cần kho giới hạn chung. `TRUST_PROXY_HOPS=0` khi chạy trực tiếp, `1` cho cấu hình Render hiện tại; không đặt khi hạ tầng proxy khác với cấu hình. Giới hạn scrypt có thể trả 429 sớm hơn khi máy bận.
 
@@ -120,7 +149,7 @@ apiRouter.get('/items', validate({ query: paginationSchema }), async (_req, res)
 | 400 | `INVALID_JSON`, `INVALID_REQUEST` | JSON sai cú pháp, URL/request không hợp lệ |
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | Phiên/token không hợp lệ hoặc đăng nhập thất bại |
 | 409 | `EMAIL_ALREADY_EXISTS` | Email đăng ký đã có tài khoản |
-| 403 | `FORBIDDEN`, `CORS_ORIGIN_DENIED`, `HOUSEHOLD_NOT_APPROVED` | Không có quyền/origin/hộ không được nhận cam kết mới |
+| 403 | `ACCOUNT_BLOCKED`, `FORBIDDEN`, `CORS_ORIGIN_DENIED`, `HOUSEHOLD_NOT_APPROVED` | Tài khoản bị khóa, không có quyền/origin/hộ không được nhận cam kết mới |
 | 404 | `NOT_FOUND` | Không tìm thấy route hoặc đối tượng |
 | 409 | `INVALID_STATE`, `HOLD_EXPIRED`, `STALE_VERSION` | Xung đột trạng thái/thời hạn/phiên bản |
 | 409 | `AVAILABILITY_CONFLICT`, `IDEMPOTENCY_CONFLICT` | Hết khả dụng hoặc dùng lại khóa với payload khác |

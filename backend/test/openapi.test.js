@@ -45,8 +45,10 @@ test('OpenAPI is valid with resolved references and documents implemented system
   assert.deepEqual(Object.keys(document.paths).sort(), [
     '/api/health', '/api/ready', '/api/v1/auth/register', '/api/v1/auth/login',
     '/api/v1/auth/refresh', '/api/v1/auth/me', '/api/v1/auth/logout',
+    '/api/v1/admin/users/{userId}/status',
   ].sort());
   assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
+  assert.deepEqual(document.paths['/api/v1/admin/users/{userId}/status'].patch.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/auth/register'].post.security, []);
   assert.deepEqual(document.components.schemas.ErrorCode.enum, Object.keys(ERROR_DEFINITIONS));
   const response = await fetch(`${baseUrl}/api/openapi.json`);

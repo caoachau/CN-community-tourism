@@ -106,7 +106,7 @@ let server, baseUrl;
 before(async () => {
   const router = Router();
   // Test routes are deliberately never mounted in the production server.
-  const service = { authenticate: async (token) => ({ user: { id: '1', role: token.split('.')[0] }, sessionId: '1' }) };
+  const service = { authenticate: async (token) => ({ user: { id: '1', role: token.split('.')[0], status: 'ACTIVE' }, sessionId: '1' }) };
   for (const role of ['CUSTOMER', 'HOUSEHOLD', 'ADMIN']) {
     router.get(`/test/${role}`, authenticate(service), requireRoles(role), (_req, res) => res.json({ allowed: true }));
   }

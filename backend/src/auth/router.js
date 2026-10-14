@@ -1,19 +1,11 @@
 import { createHash } from 'node:crypto';
 import { Router } from 'express';
-import { z } from 'zod';
 import { validate } from '../shared/validation.js';
 import { sendSuccess } from '../shared/http.js';
 import { AppError } from '../shared/errors.js';
 import { authenticate } from './middleware.js';
-
-const email = z.string().trim().toLowerCase().max(254).pipe(z.email());
-const password = z.string().min(15).max(128);
-export const registerSchema = z.strictObject({
-  email, password, displayName: z.string().trim().min(1).max(150),
-  phone: z.string().trim().min(8).max(32).regex(/^\+?[0-9 ()-]+$/).optional(),
-});
-export const loginSchema = z.strictObject({ email, password: z.string().min(1).max(128) });
-export const refreshSchema = z.strictObject({ refreshToken: z.string().regex(/^[\w-]{43}$/) });
+import { registerSchema, loginSchema, refreshSchema } from './schemas.js';
+export { registerSchema, loginSchema, refreshSchema } from './schemas.js';
 
 // Single-instance MVP limiter; bounded state, no tokens/email/IP in logs.
 export function createAuthLimiter({ now = Date.now, windowMs = 900000, maxIp = 60, maxEmail = 12, maxEntries = 10000 } = {}) {

@@ -7,6 +7,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import mysql from 'mysql2/promise';
 import { createTestDatabase } from '../support/mysql.js';
+import { insert } from '../support/fixtures.js';
 import { testDatabaseOptions } from '../support/config.js';
 import { databaseAccess } from '../../src/database.js';
 import { createApp } from '../../src/app.js';
@@ -15,7 +16,8 @@ import { createAuthRepository } from '../../src/auth/repository.js';
 import { createAuthService } from '../../src/auth/service.js';
 import { hashPassword } from '../../src/auth/passwords.js';
 import { hashRefreshToken, createTokenCodec } from '../../src/auth/tokens.js';
-import { authenticate, requireRoles, requireHouseholdOwner } from '../../src/auth/middleware.js';
+import { authenticate, requireRoles, requireHouseholdOwner, requireOwnership } from '../../src/auth/middleware.js';
+import { ownershipTypes, ownershipRule } from '../../src/auth/ownership.js';
 import { openApiDocument } from '../../src/openapi.js';
 import { createLogger } from '../../src/shared/logger.js';
 
@@ -45,6 +47,10 @@ before(async () => {
     router.get(`/test/households/:householdId/${path}`, authenticate(service),
       requireHouseholdOwner(service, undefined, { requireApproved }), (_req, res) => res.json({ allowed: true }));
   }
+  for (const type of ownershipTypes) for (const as of ownershipRule(type).modes) {
+    router.get(`/test/ownership/${as}/${type}/:id`, authenticate(service), requireOwnership(service, { resourceType: type, as }),
+      (_req, res) => res.json(res.locals.ownership));
+  }
   server = createApp({ logger, authService: service, apiRouter: router }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -61,7 +67,8 @@ async function request(path, { method = 'GET', body, token } = {}) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const data = await response.json();
-  const operation = contract.paths[`/api/v1${path}`]?.[method.toLowerCase()];
+  const contractPath = /^\/admin\/users\/[^/]+\/status$/.test(path) ? '/api/v1/admin/users/{userId}/status' : `/api/v1${path}`;
+  const operation = contract.paths[contractPath]?.[method.toLowerCase()];
   if (operation) {
     const responseSchema = (operation.responses[response.status] ?? operation.responses.default).content['application/json'].schema;
     const validate = ajv.compile(responseSchema);
@@ -169,7 +176,8 @@ test('live account blocking, disabling and role changes take effect before acces
   assert.equal(me.body.data.user.role, 'CUSTOMER');
   for (const change of ["status = 'BLOCKED'", 'disabled_at = UTC_TIMESTAMP(6)']) {
     await sql((connection) => connection.execute(`UPDATE users SET ${change} WHERE id = ?`, [user.id]));
-    assert.equal((await request('/auth/me', { token: auth.accessToken })).status, 401);
+    const blocked = await request('/auth/me', { token: auth.accessToken });
+    assert.equal(blocked.status, 403); assert.equal(blocked.body.error.code, 'ACCOUNT_BLOCKED');
     await assert.rejects(service.refresh(auth.refreshToken), { code: 'UNAUTHENTICATED' });
     await sql((connection) => connection.execute("UPDATE users SET status = 'ACTIVE', disabled_at = NULL WHERE id = ?", [user.id]));
   }
@@ -233,4 +241,184 @@ test('duplicate registration races create one account and one session; session f
 test('registration service never trusts a directly supplied elevated role', async () => {
   const auth = await service.register({ email: 'direct-role@example.invalid', password, displayName: 'Direct', role: 'ADMIN' });
   assert.equal(auth.user.role, 'CUSTOMER');
+});
+
+test('every registered ownership lookup executes safely on the current schema', async () => {
+  for (const type of ownershipTypes) assert.equal(await repository.read((tx) => tx.findOwnership(type, '18446744073709551615')), null);
+});
+
+test('nested ownership uses the actual household/customer, not creator/uploader or a claimed household ID', async () => {
+  const ownerA = await account('HOUSEHOLD'); const ownerB = await account('HOUSEHOLD'); const admin = await account('ADMIN');
+  const householdA = await household(ownerA); await household(ownerB);
+  const rows = await sql(async (connection) => {
+    const room = await insert(connection, 'rooms', { household_id: householdA, code: `OWN-${++counter}`, max_guests: 4, nightly_price_vnd: '400000' });
+    const booking = await insert(connection, 'bookings', {
+      household_id: householdA, booking_code: `OWN-${++counter}`, customer_user_id: ownerB.id, created_by: ownerA.id,
+      source: 'ONLINE', status: 'CONFIRMED', contact_name: 'Ownership test', contact_phone: '0900000000',
+      first_starts_at: '2030-10-14 07:00:00', last_ends_at: '2030-10-15 05:00:00', total_vnd: '400000', terms_snapshot: {}, confirmed_at: '2030-10-01 00:00:00',
+    });
+    const reservationSet = await insert(connection, 'reservation_sets', { household_id: householdA, booking_id: booking, status: 'COMMITTED' });
+    const bookingItem = await insert(connection, 'booking_items', {
+      household_id: householdA, reservation_set_id: reservationSet, kind: 'ROOM', room_id: room, participant_count: 2,
+      quantity: '1', pricing_type: 'PER_NIGHT', is_exclusive: 1, check_in_date: '2030-10-14', check_out_date: '2030-10-15',
+      starts_at: '2030-10-14 07:00:00', ends_at: '2030-10-15 05:00:00', unit_price_vnd: '400000', base_amount_vnd: '400000', snapshot: {},
+    });
+    const contentRevision = await insert(connection, 'content_revisions', {
+      content_type: 'ROOM', room_id: room, version: 1, title: 'Ownership test', body: 'Room description', details: {}, schema_version: 1, submitted_by: ownerB.id,
+    });
+    const revisionMedia = await insert(connection, 'revision_media', {
+      revision_id: contentRevision, storage_provider: 'TEST', object_key: 'ownership-photo.jpg', mime_type: 'image/jpeg',
+      size_bytes: '1000', uploaded_by: ownerB.id, sort_order: 1,
+    });
+    const financialEntry = await insert(connection, 'financial_entries', {
+      household_id: householdA, entry_type: 'EXPENSE', amount_vnd: '50000', payment_method: 'CASH',
+      occurred_at: '2030-10-14 00:00:00', recorded_by: ownerB.id, note: 'Ownership fixture',
+    });
+    return { room, booking, reservationSet, bookingItem, contentRevision, revisionMedia, financialEntry };
+  });
+  const a = await login(ownerA); const b = await login(ownerB); const adminAuth = await login(admin);
+  for (const [type, id] of Object.entries(rows)) {
+    const path = `/test/ownership/household/${type}/${id}`;
+    assert.equal((await request(path, { token: a.accessToken })).status, 200, type);
+    assert.equal((await request(path, { token: b.accessToken })).status, 403, type);
+    assert.equal((await request(path, { token: adminAuth.accessToken })).status, 403, type);
+  }
+  for (const type of ['booking', 'bookingItem', 'reservationSet']) {
+    const path = `/test/ownership/customer/${type}/${rows[type]}`;
+    assert.equal((await request(path, { token: b.accessToken })).status, 200);
+    assert.equal((await request(path, { token: a.accessToken })).status, 403);
+    assert.equal((await request(`${path}?householdId=${householdA}&userId=${ownerB.id}`, { token: a.accessToken })).status, 403);
+  }
+  assert.equal((await request('/test/ownership/household/room/18446744073709551615', { token: a.accessToken })).status, 403);
+});
+
+test('offline bookings confer no customer ownership; platform articles confer no household ownership', async () => {
+  const owner = await account('HOUSEHOLD'); const admin = await account('ADMIN'); const id = await household(owner);
+  const rows = await sql(async (connection) => {
+    const booking = await insert(connection, 'bookings', {
+      household_id: id, booking_code: `OFFLINE-${++counter}`, customer_user_id: null, created_by: owner.id,
+      source: 'OFFLINE', offline_channel: 'PHONE', status: 'CONFIRMED', contact_name: 'Offline test', contact_phone: '0900000000',
+      first_starts_at: '2030-10-14 07:00:00', last_ends_at: '2030-10-14 09:00:00', total_vnd: '100000', terms_snapshot: {}, confirmed_at: '2030-10-01 00:00:00',
+    });
+    const article = await insert(connection, 'cultural_articles', { author_user_id: admin.id, slug: `global-${++counter}` });
+    const revision = await insert(connection, 'content_revisions', {
+      content_type: 'ARTICLE', article_id: article, version: 1, title: 'Platform content', body: 'Global article', details: {}, schema_version: 1, submitted_by: owner.id,
+    });
+    return { booking, article, revision };
+  });
+  const auth = await login(owner);
+  assert.equal((await request(`/test/ownership/customer/booking/${rows.booking}`, { token: auth.accessToken })).status, 403);
+  assert.equal((await request(`/test/ownership/household/booking/${rows.booking}`, { token: auth.accessToken })).status, 200);
+  assert.equal((await request(`/test/ownership/household/article/${rows.article}`, { token: auth.accessToken })).status, 403);
+  assert.equal((await request(`/test/ownership/household/contentRevision/${rows.revision}`, { token: auth.accessToken })).status, 403);
+});
+
+test('notifications are scoped to their actual user for all three roles', async () => {
+  const admin = await account('ADMIN'); const other = await account();
+  const notification = await sql((connection) => insert(connection, 'notifications', {
+    user_id: admin.id, event_key: `TEST-${++counter}`, event_type: 'TEST', title: 'Private', body: 'Test only', navigation: {},
+  }));
+  const a = await login(admin); const b = await login(other);
+  assert.equal((await request(`/test/ownership/user/notification/${notification}`, { token: a.accessToken })).status, 200);
+  assert.equal((await request(`/test/ownership/user/notification/${notification}`, { token: b.accessToken })).status, 403);
+});
+
+test('only ADMIN can change account status and a reason is mandatory; self-block is forbidden', async () => {
+  const target = await account(); const admin = await account('ADMIN'); const customer = await account(); const owner = await account('HOUSEHOLD');
+  const path = `/admin/users/${target.id}/status`;
+  assert.equal((await request(path, { method: 'PATCH', body: { status: 'BLOCKED', reason: 'Test' } })).status, 401);
+  for (const user of [customer, owner]) {
+    const auth = await login(user);
+    assert.equal((await request(path, { method: 'PATCH', token: auth.accessToken, body: { status: 'BLOCKED', reason: 'Test' } })).status, 403);
+  }
+  const auth = await login(admin);
+  for (const body of [{ status: 'BLOCKED' }, { status: 'BLOCKED', reason: '   ' }, { status: 'BLOCKED', reason: 'Test', role: 'ADMIN' }]) {
+    assert.equal((await request(path, { method: 'PATCH', token: auth.accessToken, body })).status, 422);
+  }
+  assert.equal((await request(`/admin/users/${admin.id}/status`, { method: 'PATCH', token: auth.accessToken, body: { status: 'BLOCKED', reason: 'Self' } })).status, 403);
+  assert.equal((await request('/admin/users/18446744073709551615/status', { method: 'PATCH', token: auth.accessToken, body: { status: 'BLOCKED', reason: 'Missing' } })).status, 404);
+  assert.equal((await repository.read((tx) => tx.findUserById(target.id))).status, 'ACTIVE');
+});
+
+test('blocking revokes every device atomically, audits once and unblocking never revives tokens or changes household approval', async () => {
+  const admin = await account('ADMIN'); const owner = await account('HOUSEHOLD'); const id = await household(owner);
+  const adminAuth = await login(admin); const one = await login(owner); const two = await login(owner);
+  const path = `/admin/users/${owner.id}/status`;
+  const block = await request(path, { method: 'PATCH', token: adminAuth.accessToken, body: { status: 'BLOCKED', reason: '  Vi phạm quy định  ' } });
+  assert.equal(block.status, 200); assert.equal(block.body.data.changed, true); assert.equal(block.body.data.revokedSessionCount, 2);
+  assert.equal(block.body.data.user.status, 'BLOCKED'); assert.ok(block.body.data.user.disabledAt);
+  for (const auth of [one, two]) {
+    const me = await request('/auth/me', { token: auth.accessToken });
+    assert.equal(me.status, 403); assert.equal(me.body.error.code, 'ACCOUNT_BLOCKED');
+    await assert.rejects(service.refresh(auth.refreshToken), { code: 'UNAUTHENTICATED' });
+  }
+  await assert.rejects(login(owner), { code: 'INVALID_CREDENTIALS' });
+  const replay = await request(path, { method: 'PATCH', token: adminAuth.accessToken, body: { status: 'BLOCKED', reason: 'Retry' } });
+  assert.equal(replay.body.data.changed, false); assert.equal(replay.body.data.revokedSessionCount, 0);
+  await sql(async (connection) => {
+    const [events] = await connection.execute("SELECT * FROM activity_events WHERE entity_type='USER' AND entity_id=?", [owner.id]);
+    assert.equal(events.length, 1); assert.equal(events[0].actor_user_id, String(admin.id));
+    assert.equal(events[0].reason, 'Vi phạm quy định'); assert.equal(events[0].correlation_id, block.body.meta.requestId);
+    assert.equal(events[0].from_status, 'ACTIVE'); assert.equal(events[0].to_status, 'BLOCKED');
+    assert.doesNotMatch(JSON.stringify(events), /password_hash|refreshToken|accessToken/);
+  });
+  const unblock = await request(path, { method: 'PATCH', token: adminAuth.accessToken, body: { status: 'ACTIVE', reason: 'Đã xử lý' } });
+  assert.equal(unblock.status, 200); assert.equal(unblock.body.data.user.disabledAt, null);
+  for (const auth of [one, two]) {
+    assert.equal((await request('/auth/me', { token: auth.accessToken })).status, 401);
+    await assert.rejects(service.refresh(auth.refreshToken), { code: 'UNAUTHENTICATED' });
+  }
+  assert.equal((await login(owner)).user.role, 'HOUSEHOLD');
+  assert.equal((await repository.read((tx) => tx.findHousehold(id))).approval_status, 'APPROVED');
+  assert.equal((await request('/auth/me', { token: adminAuth.accessToken })).status, 200);
+});
+
+test('status, session revocation and audit roll back together if the audit write fails', async () => {
+  const admin = await account('ADMIN'); const target = await account(); const adminAuth = await login(admin); const targetAuth = await login(target);
+  const context = await service.authenticate(adminAuth.accessToken);
+  const broken = createAuthService({ options, repository: {
+    ...repository, transaction: (work) => repository.transaction((tx) => work({ ...tx, recordAccountStatus: async () => { throw new Error('TEST_AUDIT_FAILURE'); } })),
+  } });
+  await assert.rejects(broken.setAccountStatus(context, String(target.id), { status: 'BLOCKED', reason: 'Test rollback' }, 'test-audit-rollback'), /TEST_AUDIT_FAILURE/);
+  assert.equal((await repository.read((tx) => tx.findUserById(target.id))).status, 'ACTIVE');
+  assert.equal((await service.authenticate(targetAuth.accessToken)).user.id, String(target.id));
+});
+
+test('a stale admin context cannot bypass a role change or session revocation inside the status transaction', async () => {
+  const admin = await account('ADMIN'); const target = await account(); const auth = await login(admin); const context = await service.authenticate(auth.accessToken);
+  await sql((connection) => connection.execute("UPDATE users SET role='CUSTOMER' WHERE id=?", [admin.id]));
+  await assert.rejects(service.setAccountStatus(context, String(target.id), { status: 'BLOCKED', reason: 'Stale role' }, 'test-stale-role'), { code: 'FORBIDDEN' });
+  await sql((connection) => connection.execute("UPDATE users SET role='ADMIN' WHERE id=?", [admin.id]));
+  await service.logout(context);
+  await assert.rejects(service.setAccountStatus(context, String(target.id), { status: 'BLOCKED', reason: 'Stale session' }, 'test-stale-session'), { code: 'UNAUTHENTICATED' });
+  assert.equal((await repository.read((tx) => tx.findUserById(target.id))).status, 'ACTIVE');
+});
+
+test('concurrent admins blocking each other leave exactly one active account', async () => {
+  const a = await account('ADMIN'); const b = await account('ADMIN'); const aa = await login(a); const bb = await login(b);
+  const ca = await service.authenticate(aa.accessToken); const cb = await service.authenticate(bb.accessToken);
+  const results = await Promise.allSettled([
+    service.setAccountStatus(ca, String(b.id), { status: 'BLOCKED', reason: 'Admin race A' }, 'test-admin-race-a'),
+    service.setAccountStatus(cb, String(a.id), { status: 'BLOCKED', reason: 'Admin race B' }, 'test-admin-race-b'),
+  ]);
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+  assert.equal(results.find((result) => result.status === 'rejected').reason.code, 'ACCOUNT_BLOCKED');
+  const states = await repository.read(async (tx) => [(await tx.findUserById(a.id)).status, (await tx.findUserById(b.id)).status]);
+  assert.deepEqual(states.sort(), ['ACTIVE', 'BLOCKED']);
+});
+
+test('blocking against login or refresh cannot leave a usable session after unblock', async () => {
+  const admin = await account('ADMIN'); const target = await account(); const adminAuth = await login(admin);
+  const actor = await service.authenticate(adminAuth.accessToken); const existing = await login(target);
+  const [blocked, refreshed, loggedIn] = await Promise.allSettled([
+    service.setAccountStatus(actor, String(target.id), { status: 'BLOCKED', reason: 'Race' }, 'test-block-auth-race'),
+    service.refresh(existing.refreshToken), login(target),
+  ]);
+  assert.equal(blocked.status, 'fulfilled');
+  await service.setAccountStatus(actor, String(target.id), { status: 'ACTIVE', reason: 'Test unblock' }, 'test-unblock-auth-race');
+  for (const result of [refreshed, loggedIn]) if (result.status === 'fulfilled') {
+    await assert.rejects(service.authenticate(result.value.accessToken), { code: 'UNAUTHENTICATED' });
+    await assert.rejects(service.refresh(result.value.refreshToken), { code: 'UNAUTHENTICATED' });
+  }
+  await assert.rejects(service.authenticate(existing.accessToken), { code: 'UNAUTHENTICATED' });
 });

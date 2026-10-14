@@ -25,6 +25,7 @@ export function errorHandler(error, _request, response, _next) {
   }
 
   response.set('Cache-Control', 'no-store');
+  if (normalized.status === 401) response.set('WWW-Authenticate', 'Bearer');
   return response.status(normalized.status).json({
     success: false,
     error: {

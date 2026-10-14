@@ -7,6 +7,7 @@ import { errorHandler, notFound, sendSuccess } from './shared/http.js';
 import { logger as defaultLogger } from './shared/logger.js';
 import { requestContext } from './shared/request-context.js';
 import { createAuthRouter } from './auth/router.js';
+import { createAdminAccountRouter } from './auth/admin-router.js';
 
 export function createApp({
   checkDatabase,
@@ -58,7 +59,10 @@ export function createApp({
       swaggerOptions: { validatorUrl: null, persistAuthorization: false },
     }));
   }
-  if (authService) app.use('/api/v1/auth', createAuthRouter(authService));
+  if (authService) {
+    app.use('/api/v1/auth', createAuthRouter(authService));
+    app.use('/api/v1/admin', createAdminAccountRouter(authService));
+  }
   if (apiRouter) app.use('/api/v1', apiRouter);
 
   app.use(notFound);

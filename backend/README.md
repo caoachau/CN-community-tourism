@@ -20,7 +20,7 @@ Fill `DATABASE_URL` with the current Aiven URI and configure `DB_SSL_CA_PATH` be
 
 `/api/health` reports process liveness. `/api/ready` verifies the database connection and returns 200 or a generic 503 without exposing connection details. Shutdown closes HTTP and the database pool.
 
-Swagger UI is available at `http://localhost:5000/api/docs/`; the OpenAPI document is at `/api/openapi.json`. See [API.md](API.md) for authentication, shared Zod validation, error codes/envelopes, request IDs and JSON logging. Configure `API_DOCS_ENABLED=false` to disable both documentation endpoints and `LOG_LEVEL` to control verbosity. Authentication is mounted under `/api/v1/auth` and documented alongside health/readiness.
+Swagger UI is available at `http://localhost:5000/api/docs/`; the OpenAPI document is at `/api/openapi.json`. See [API.md](API.md) for authentication, role/ownership guards, account blocking, shared validation, errors and logging. Configure `API_DOCS_ENABLED=false` to disable both documentation endpoints and `LOG_LEVEL` to control verbosity. Authentication is mounted under `/api/v1/auth`; ADMIN can block/unblock accounts through `PATCH /api/v1/admin/users/:userId/status`. Blocking revokes every session and records an audit event atomically. Unblocking requires a new login and does not change household approval or existing bookings.
 
 `npm run db:check:tls --workspace backend` also checks that an unrelated CA and a wrong TLS hostname are rejected. Both commands only inspect the connection and set its session timezone; neither runs migrations, seeds or business writes.
 
