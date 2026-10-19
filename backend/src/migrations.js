@@ -16,9 +16,9 @@ export function quoteDatabase(name) {
 
 // Deliberately supports only the reviewed, additive initial DDL. New SQL forms
 // require explicit parser/test changes rather than a permissive SQL splitter.
-export function parseMigration(source, { jsonLiterals = false } = {}) {
+export function parseMigration(source, { jsonLiterals = false, evolution = false } = {}) {
   const stripped = normalize(source).replace(/^\s*--[^\n]*(?:\n|$)/gm, '').trim();
-  if (jsonLiterals) {
+  if (jsonLiterals || evolution) {
     // Mask single-quoted literals before checking scope; JSON Schema contains
     // double quotes and SQL keywords as data. Never enable multipleStatements.
     let masked = ''; let quoted = false;
@@ -38,6 +38,10 @@ export function parseMigration(source, { jsonLiterals = false } = {}) {
       const scope = masked.slice(start, i).trim(); start = i + 1;
       if (!sql) continue;
       if (/^SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci$/i.test(sql) || /^SET SESSION time_zone = '\+00:00'$/i.test(sql)) { result.push(sql); continue; }
+      if (evolution) {
+        validateEvolutionStatement(sql, scope);
+        result.push(sql); continue;
+      }
       if (!(/^CREATE TABLE [a-z][a-z0-9_]*\s*\(/i.test(scope) || /^ALTER TABLE [a-z][a-z0-9_]* ADD CONSTRAINT [a-z][a-z0-9_]* FOREIGN KEY\s*\(/i.test(scope)) ||
           /\b(?:USE|DATABASE|SCHEMA|GRANT|REVOKE|DROP|TRUNCATE|RENAME|SELECT|INSERT|DELETE|UPDATE|LIKE|OUTFILE|INFILE)\b/i.test(scope) ||
           /\b(?:TABLE|REFERENCES)\s+[a-z0-9_]+\s*\./i.test(scope)) fail('UNSAFE_MIGRATION_SCOPE');
@@ -60,6 +64,57 @@ export function parseMigration(source, { jsonLiterals = false } = {}) {
   return statements;
 }
 
+// Split table elements / ALTER actions, never commas inside expressions/literals.
+export function splitDefinitions(text) {
+  let depth = 0; let quoted = false; let start = 0;
+  const result = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted && ch === '\\') { i++; continue; }
+    if (ch === "'") {
+      if (quoted && text[i + 1] === "'") { i++; continue; }
+      quoted = !quoted; continue;
+    }
+    if (quoted) continue;
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (depth < 0) fail('UNSUPPORTED_MIGRATION_FORMAT');
+    if (ch === ',' && depth === 0) { result.push(text.slice(start, i).trim()); start = i + 1; }
+  }
+  if (quoted || depth !== 0) fail('UNSUPPORTED_MIGRATION_FORMAT');
+  result.push(text.slice(start).trim());
+  return result;
+}
+
+function validateEvolutionStatement(sql, scope) {
+  if (/\b(?:USE|DATABASE|SCHEMA|GRANT|REVOKE|TRUNCATE|RENAME|INSERT|DELETE|REPLACE|OUTFILE|INFILE|TRIGGER|PROCEDURE|EVENT|PREPARE|EXECUTE)\b/i.test(scope) ||
+      /\b(?:TABLE|REFERENCES|JOIN|FROM|UPDATE)\s+[a-z0-9_]+\s*\./i.test(scope)) fail('UNSAFE_MIGRATION_SCOPE');
+  if (/^CREATE TABLE [a-z][a-z0-9_]*\s*\(/i.test(scope)) {
+    if (/\b(?:DROP|SELECT|UPDATE|LIKE)\b/i.test(scope)) fail('UNSAFE_MIGRATION_SCOPE');
+    return;
+  }
+  if (/^ALTER TABLE [a-z][a-z0-9_]*\s+/i.test(scope)) {
+    if (/\b(?:SELECT|UPDATE|LIKE)\b/i.test(scope)) fail('UNSAFE_MIGRATION_SCOPE');
+    for (const action of splitDefinitions(sql.replace(/^ALTER TABLE \w+\s+/i, ''))) {
+      if (!/^(?:ADD COLUMN \w+\s|MODIFY COLUMN \w+\s|ADD (?:UNIQUE )?KEY \w+\s*\(|ADD CONSTRAINT \w+ (?:CHECK|FOREIGN KEY)\s*\(|DROP (?:CHECK|INDEX|FOREIGN KEY) \w+$)/i.test(action)) fail('UNSAFE_MIGRATION_SCOPE');
+      if (/\bDROP\s+(?:TABLE|COLUMN|PRIMARY)\b/i.test(action)) fail('UNSAFE_MIGRATION_SCOPE');
+    }
+    return;
+  }
+  // Backfills can write only the new columns of migration 003. Existing facts
+  // (prices, dates, users, statuses, source rows) are never valid UPDATE targets.
+  const update = /^UPDATE (reservation_sets rs|bookings b)\s/i.exec(scope);
+  const set = /\bSET\s+([\s\S]+)\s+WHERE\s+([\s\S]+)$/i.exec(sql);
+  if (!update || !set) fail('UNSAFE_MIGRATION_SCOPE');
+  const allowed = update[1] === 'reservation_sets rs'
+    ? new Set(['rs.total_vnd', 'rs.terms_snapshot', 'rs.first_starts_at', 'rs.last_ends_at', 'rs.accepted_at'])
+    : new Set(['b.current_reservation_set_id']);
+  for (const assignment of splitDefinitions(set[1])) {
+    if (!allowed.has(/^([a-z_]+\.[a-z_]+)\s*=/.exec(assignment)?.[1])) fail('UNSAFE_MIGRATION_SCOPE');
+  }
+  if (!/^(?:rs\.total_vnd|b\.current_reservation_set_id) IS NULL(?:\s|$)/i.test(set[2])) fail('UNSAFE_MIGRATION_SCOPE');
+}
+
 export async function loadMigrations(directory = new URL('../migrations/', import.meta.url)) {
   const files = (await readdir(directory)).filter((file) => file.endsWith('.sql')).sort();
   if (!files.length) fail('NO_MIGRATIONS_FOUND');
@@ -69,9 +124,11 @@ export async function loadMigrations(directory = new URL('../migrations/', impor
     if (!match || Number(match[1]) !== migrations.length + 1) fail('INVALID_MIGRATION_SEQUENCE');
     const source = normalize(await readFile(new URL(file, directory), 'utf8'));
     const replacement = file === '002_compact_v3.sql';
+    const evolution = file === '003_survey_schema.sql';
     migrations.push({ version: Number(match[1]), file, checksum: digest(source),
       ...(replacement ? { mode: 'REPLACE_EMPTY' } : {}),
-      statements: parseMigration(source, { jsonLiterals: replacement }) });
+      ...(evolution ? { mode: 'SURVEY_UPGRADE' } : {}),
+      statements: parseMigration(source, { jsonLiterals: replacement, evolution }) });
   }
   const checksum = digest(migrations.map(({ version, file, checksum }) => `${version}:${file}:${checksum}`).join('\n'));
   return { migrations, checksum, expected: expectedStructure(migrations) };
@@ -89,13 +146,38 @@ export function expectedStructure(migrations) {
       const primary = /PRIMARY KEY\s*\(([^)]+)\)/i.exec(sql);
       if (!primary) fail('MIGRATION_TABLE_REQUIRES_PRIMARY_KEY');
       const columns = primary[1].split(',').map((value) => value.trim());
-      tables.push({ name: table, primaryKey: columns });
+      const definition = { name: table, primaryKey: columns, columns: [], indexes: [] };
+      tables.push(definition);
+      for (const part of splitDefinitions(sql.slice(sql.indexOf('(') + 1, sql.lastIndexOf(')')))) {
+        addDefinition(definition, part);
+      }
       for (const match of sql.matchAll(/CONSTRAINT (\w+) CHECK\s*\(/gi)) checks.push({ table, name: match[1] });
     } else {
       const fk = /^ALTER TABLE (\w+) ADD CONSTRAINT (\w+) FOREIGN KEY\s*\(([^)]+)\) REFERENCES (\w+)\s*\(([^)]+)\)$/i.exec(sql);
       if (fk) foreignKeys.push({ table: fk[1], name: fk[2], columns: fk[3].split(',').map((v) => v.trim()),
         parent: fk[4], parentColumns: fk[5].split(',').map((v) => v.trim()) });
-      else if (/^ALTER /i.test(sql)) fail('UNSUPPORTED_FOREIGN_KEY_FORMAT');
+      else if (/^ALTER /i.test(sql)) {
+        const name = /^ALTER TABLE (\w+)/i.exec(sql)?.[1];
+        const definition = tables.find((entry) => entry.name === name);
+        if (!definition) fail('UNKNOWN_MIGRATION_TABLE');
+        for (const action of splitDefinitions(sql.replace(/^ALTER TABLE \w+\s+/i, ''))) {
+          let match;
+          if ((match = /^DROP CHECK (\w+)$/i.exec(action))) {
+            const index = checks.findIndex((c) => c.table === name && c.name === match[1]);
+            if (index < 0) fail('UNKNOWN_MIGRATION_CHECK'); checks.splice(index, 1);
+          } else if ((match = /^ADD CONSTRAINT (\w+) CHECK\s*\(/i.exec(action))) {
+            checks.push({ table: name, name: match[1] });
+          } else if ((match = /^DROP FOREIGN KEY (\w+)$/i.exec(action))) {
+            const index = foreignKeys.findIndex((c) => c.table === name && c.name === match[1]);
+            if (index < 0) fail('UNKNOWN_MIGRATION_FOREIGN_KEY'); foreignKeys.splice(index, 1);
+          } else if ((match = /^DROP INDEX (\w+)$/i.exec(action))) {
+            const index = definition.indexes.findIndex((c) => c.name === match[1]);
+            if (index < 0) fail('UNKNOWN_MIGRATION_INDEX'); definition.indexes.splice(index, 1);
+          } else if (/^(?:ADD COLUMN|MODIFY COLUMN|ADD (?:UNIQUE )?KEY) /i.test(action)) {
+            addDefinition(definition, action.replace(/^(?:ADD COLUMN|MODIFY COLUMN|ADD) /i, ''), /^MODIFY /i.test(action));
+          } else fail('UNSUPPORTED_ALTER_FORMAT');
+        }
+      }
     }
   }
   const names = new Set(tables.map((table) => table.name));
@@ -103,6 +185,25 @@ export function expectedStructure(migrations) {
     fail('INVALID_MIGRATION_FOREIGN_KEY');
   }
   return { tables, foreignKeys, checks };
+}
+
+function addDefinition(table, part, modify = false) {
+  const index = /^(UNIQUE )?KEY (\w+)\s*\(([^)]+)\)$/i.exec(part);
+  if (index) {
+    table.indexes.push({ name: index[2], unique: Boolean(index[1]), columns: index[3].split(',').map((c) => c.trim()) });
+    return;
+  }
+  const column = /^(\w+)\s+((?:BIGINT|INT|SMALLINT|TINYINT|VARCHAR|CHAR|VARBINARY|BINARY|DECIMAL|DATETIME|TIMESTAMP|TIME|DATE|LONGTEXT|TEXT|JSON)(?:\(\d+(?:,\d+)?\))?(?: UNSIGNED)?)(?:\s|$)/i.exec(part);
+  if (!column) return;
+  const generated = /GENERATED ALWAYS AS/i.test(part);
+  const nullability = generated ? part.split(/GENERATED ALWAYS AS/i)[0] : part;
+  const value = { name: column[1], type: column[2].toLowerCase(), nullable: !/\bNOT NULL\b/i.test(nullability), generated };
+  const previous = table.columns.findIndex((c) => c.name === value.name);
+  if (modify) {
+    if (previous < 0) fail('UNKNOWN_MIGRATION_COLUMN'); table.columns[previous] = value;
+  } else {
+    if (previous >= 0) fail('DUPLICATE_MIGRATION_COLUMN'); table.columns.push(value);
+  }
 }
 
 export const historySql = `CREATE TABLE schema_migrations (
@@ -184,16 +285,28 @@ export async function verifyStructure(connection, database, expected) {
   const expectedChecks = [...expected.checks, { table: HISTORY_TABLE, name: 'ck_schema_migrations_status' }];
   if (checks.length !== expectedChecks.length || expectedChecks.some((check) => !checks.some((actual) =>
     actual.tableName === check.table && actual.name === check.name && actual.enforced === 'YES'))) fail('MIGRATION_CHECK_VERIFICATION_FAILED');
+  const [columns] = await query(connection, 'SELECT TABLE_NAME AS tableName, COLUMN_NAME AS name, COLUMN_TYPE AS type, IS_NULLABLE AS nullable, EXTRA AS extra FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ?', [database]);
+  const [indexes] = await query(connection, 'SELECT TABLE_NAME AS tableName, INDEX_NAME AS name, COLUMN_NAME AS columnName, NON_UNIQUE AS nonUnique FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX', [database]);
+  for (const table of expected.tables) {
+    const actualColumns = columns.filter((c) => c.tableName === table.name);
+    if (actualColumns.length !== table.columns.length || table.columns.some((c) => !actualColumns.some((a) =>
+      a.name === c.name && a.type.toLowerCase() === c.type && (a.nullable === 'YES') === c.nullable && /(?:STORED|VIRTUAL) GENERATED/.test(a.extra) === c.generated))) fail('MIGRATION_COLUMN_VERIFICATION_FAILED');
+    for (const index of table.indexes) {
+      const actual = indexes.filter((i) => i.tableName === table.name && i.name === index.name);
+      if (JSON.stringify(actual.map((a) => a.columnName)) !== JSON.stringify(index.columns) || actual.some((a) => (Number(a.nonUnique) === 0) !== index.unique)) fail('MIGRATION_INDEX_VERIFICATION_FAILED');
+    }
+  }
   return { tableCount: tables.length, primaryKeys: expectedNames.length, foreignKeys: expected.foreignKeys.length, enforcedChecks: checks.length };
 }
 
-export async function applyMigrations(connection, database, plan, { createDatabase = false, onProgress = () => {} } = {}) {
+export async function applyMigrations(connection, database, plan, { createDatabase = false, maintenanceConfirmed = false, onProgress = () => {} } = {}) {
   const quoted = quoteDatabase(database);
   const lock = `ctp:migrations:${digest(database).slice(0, 40)}`;
   const [[result]] = await query(connection, 'SELECT GET_LOCK(?, 0) AS acquired', [lock]);
   if (Number(result.acquired) !== 1) fail('MIGRATION_LOCK_UNAVAILABLE');
   try {
     const status = await migrationStatus(connection, database, plan);
+    if (!maintenanceConfirmed && plan.migrations.some((m) => m.mode === 'SURVEY_UPGRADE' && status.pending.includes(m.file))) fail('SURVEY_UPGRADE_REQUIRES_MAINTENANCE_WINDOW');
     if (!status.exists) {
       if (!createDatabase) fail('DATABASE_CREATION_REQUIRES_EXPLICIT_FLAG');
       await query(connection, `CREATE DATABASE ${quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);
@@ -212,6 +325,10 @@ export async function applyMigrations(connection, database, plan, { createDataba
         const { replaceEmptySchema } = await import('./schema-replacement.js');
         await replaceEmptySchema(connection, database, plan, migration, { onProgress });
         continue;
+      }
+      if (migration.mode === 'SURVEY_UPGRADE') {
+        const { surveyPreflight } = await import('./survey-migration.js');
+        await surveyPreflight(connection);
       }
       await query(connection, `INSERT INTO schema_migrations (version, filename, checksum, status, total_statements, started_at)
         VALUES (?, ?, ?, 'RUNNING', ?, UTC_TIMESTAMP(6))`, [migration.version, migration.file, migration.checksum, migration.statements.length]);

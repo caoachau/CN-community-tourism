@@ -7,11 +7,24 @@ import { loadMigrations, parseMigration, quoteDatabase, migrationErrorCode } fro
 
 test('deployment manifest matches the complete compact ERD and canonical checksum', async () => {
   const plan = await loadMigrations();
-  assert.deepEqual(plan.migrations.map((migration) => [migration.version, migration.file, migration.statements.length]), [[1, '001_initial_schema.sql', 144], [2, '002_compact_v3.sql', 108]]);
+  assert.deepEqual(plan.migrations.map((migration) => [migration.version, migration.file, migration.statements.length]), [[1, '001_initial_schema.sql', 144], [2, '002_compact_v3.sql', 108], [3, '003_survey_schema.sql', 66]]);
   assert.equal(plan.migrations[0].checksum, '0cb750b5489af3ce52c8b8293d309cc0170184eeef6d3a6366a30f5f5b100f3f');
-  assert.equal(plan.expected.tables.length, 30);
-  assert.equal(plan.expected.foreignKeys.length, 76);
-  assert.equal(plan.expected.checks.length, 130);
+  assert.equal(plan.migrations[1].checksum, 'a842313d298c45115320be95b3bef873989ce4b219047c8902a82691f22ced36');
+  assert.equal(plan.expected.tables.length, 34);
+  assert.equal(plan.expected.foreignKeys.length, 112);
+  assert.equal(plan.expected.checks.length, 174);
+});
+
+test('survey parser permits reviewed evolution without allowing destructive or unrelated writes', () => {
+  const options = { evolution: true };
+  assert.equal(parseMigration('ALTER TABLE x ADD COLUMN note VARCHAR(40) NULL, DROP CHECK ck_x, ADD CONSTRAINT ck_x CHECK (note IS NULL);', options).length, 1);
+  for (const sql of ['ALTER TABLE users DROP COLUMN email;', 'ALTER TABLE users RENAME TO old_users;',
+    'UPDATE bookings b SET b.total_vnd = 0 WHERE b.current_reservation_set_id IS NULL;',
+    'UPDATE users SET role = \'ADMIN\';', 'DELETE FROM users;', 'TRUNCATE TABLE bookings;',
+    'ALTER TABLE other.users ADD COLUMN x INT;', 'SET FOREIGN_KEY_CHECKS = 0;',
+    'CREATE TABLE x AS SELECT * FROM users;', 'ALTER TABLE x ADD COLUMN y INT; DROP TABLE users;']) {
+    assert.throws(() => parseMigration(sql, options));
+  }
 });
 
 test('migration targets safely quote hyphens and reject unsafe identifiers', () => {

@@ -13,7 +13,8 @@ before(async () => {
   assert.ok(['127.0.0.1','localhost'].includes(options.host));
   control = await mysql.createConnection(options); worker = await mysql.createConnection(options);
   await worker.query("SET SESSION sql_mode = 'ANSI,STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
-  plan = await loadMigrations(); oldPlan = { ...plan, migrations: plan.migrations.slice(0, 1) };
+  plan = await loadMigrations(); plan.migrations = plan.migrations.slice(0, 2); plan.expected = expectedStructure(plan.migrations);
+  oldPlan = { ...plan, migrations: plan.migrations.slice(0, 1) };
   oldPlan.expected = expectedStructure(oldPlan.migrations);
 });
 after(async () => {

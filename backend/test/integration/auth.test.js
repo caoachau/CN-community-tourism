@@ -34,7 +34,7 @@ async function sql(work) {
   finally { await database.closeConnection(connection); }
 }
 before(async () => {
-  database = await createTestDatabase(process.env, { schema: 'current' });
+  database = await createTestDatabase(process.env, { schema: 'survey' });
   pool = mysql.createPool({ ...testDatabaseOptions(), database: database.name, connectionLimit: 5, queueLimit: 20 });
   repository = createAuthRepository(databaseAccess(pool));
   service = createAuthService({ repository, options });
@@ -91,7 +91,7 @@ async function household(owner, status = 'APPROVED') {
   });
 }
 
-test('registration/login/me/refresh/logout work end to end on the current 30-table MySQL schema', async () => {
+test('registration/login/me/refresh/logout work end to end on the survey MySQL schema', async () => {
   const input = { email: '  First-Auth@Example.invalid ', displayName: '  Nguyễn Văn A  ', password, phone: '+84901234567' };
   const registered = await request('/auth/register', { method: 'POST', body: input });
   assert.equal(registered.status, 201);
@@ -257,7 +257,7 @@ test('nested ownership uses the actual household/customer, not creator/uploader 
       source: 'ONLINE', status: 'CONFIRMED', contact_name: 'Ownership test', contact_phone: '0900000000',
       first_starts_at: '2030-10-14 07:00:00', last_ends_at: '2030-10-15 05:00:00', total_vnd: '400000', terms_snapshot: {}, confirmed_at: '2030-10-01 00:00:00',
     });
-    const reservationSet = await insert(connection, 'reservation_sets', { household_id: householdA, booking_id: booking, status: 'COMMITTED' });
+    const reservationSet = await insert(connection, 'reservation_sets', { household_id: householdA, booking_id: booking, status: 'COMMITTED', total_vnd:'400000', terms_snapshot:{}, first_starts_at:'2030-10-14 07:00:00', last_ends_at:'2030-10-15 05:00:00' });
     const bookingItem = await insert(connection, 'booking_items', {
       household_id: householdA, reservation_set_id: reservationSet, kind: 'ROOM', room_id: room, participant_count: 2,
       quantity: '1', pricing_type: 'PER_NIGHT', is_exclusive: 1, check_in_date: '2030-10-14', check_out_date: '2030-10-15',

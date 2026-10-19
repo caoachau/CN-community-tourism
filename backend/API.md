@@ -42,11 +42,13 @@ Các chính sách tại `src/auth/policies.js` dùng chung việc xác định t
 
 | `as` | Quyền kiểm tra | `resourceType` hỗ trợ |
 | --- | --- | --- |
-| `household` | HOUSEHOLD và đúng `households.owner_user_id` | `household`, `room`, `service`, `product`, `article`, `offer`, `resource`, `availabilityBlock`, `serviceSlot`, `slotOffer`, `resourceAssignment`, `resourceRule`, `resourceUsage`, `financialEntry`, `booking`, `scheduleRequest`, `proposal`, `reservationSet`, `bookingItem`, `contentRevision`, `revisionMedia`, `productInquiry` |
-| `customer` | CUSTOMER hoặc HOUSEHOLD và đúng khách sở hữu | `booking`, `scheduleRequest`, `proposal`, `reservationSet`, `bookingItem`, `productInquiry`, `review`, `complaint` |
+| `household` | HOUSEHOLD và đúng `households.owner_user_id` | `household`, `room`, `service`, `product`, `article`, `offer`, `resource`, `availabilityBlock`, `serviceSlot`, `slotOffer`, `resourceAssignment`, `resourceRule`, `resourceUsage`, `financialEntry`, `booking`, `scheduleRequest`, `proposal`, `reservationSet`, `bookingItem`, `contentRevision`, `revisionMedia`, `productInquiry`, `place`, `depositCredit`, `creditMovement`, `resourceHandover`, `incident` |
+| `customer` | CUSTOMER hoặc HOUSEHOLD và đúng khách sở hữu | `booking`, `scheduleRequest`, `proposal`, `reservationSet`, `bookingItem`, `productInquiry`, `review`, `complaint`, `depositCredit`, `creditMovement` |
 | `user` | Đúng user sở hữu, cho cả ba role | `notification` |
 
 Hạng mục được truy ngược qua tập giữ chỗ tới booking/phương án; phiên bản nội dung và ảnh được truy về nội dung gốc. Người tạo, người đăng ảnh, số điện thoại và ID hộ tự khai không thay thế chủ sở hữu. Booking ngoài app có `customer_user_id=NULL` không cấp quyền khách cho người nhập đơn. Bài văn hóa chung không có hộ không được quản lý bằng guard hộ. ADMIN không được tự vượt ownership để xác nhận booking hoặc ghi tiền; route kiểm duyệt riêng dùng quyền ADMIN theo đúng nghiệp vụ. Đối tượng không tồn tại và không thuộc quyền cùng trả `FORBIDDEN` ở guard ownership.
+
+Các lookup sau khảo sát yêu cầu migration `003`. `incident` chỉ trả dòng `complaints.feedback_kind='INCIDENT'`, không cho hộ đọc phản ánh riêng tư qua cùng guard. Đây là chính sách truy quyền; chưa bổ sung endpoint nghiệp vụ điểm phục vụ, cọc hoặc giao/trả.
 
 Các guard này là nền để các module phòng/dịch vụ/booking tích hợp khi triển khai API; chưa có endpoint nghiệp vụ cho các module đó. Khi tải dữ liệu sau guard phải giữ điều kiện chủ sở hữu trong truy vấn. Các thao tác ghi phải kiểm tra lại tài khoản, phiên, role, household và đối tượng dưới khóa trong chính transaction, tránh dùng kết quả middleware cũ để ghi dữ liệu. Đây cũng là nguyên tắc kiểm tra từng request và từng quan hệ sở hữu trong [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
 

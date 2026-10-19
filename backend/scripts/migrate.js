@@ -7,16 +7,18 @@ function argumentsFor(args) {
   const modes = args.filter((arg) => ['--plan', '--apply', '--verify'].includes(arg));
   const values = {};
   let createDatabase = false;
+  let maintenanceConfirmed = false;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (['--plan', '--apply', '--verify'].includes(arg)) continue;
     if (arg === '--create-database') { createDatabase = true; continue; }
+    if (arg === '--maintenance-confirmed') { maintenanceConfirmed = true; continue; }
     if (['--confirm-database', '--confirm-host', '--confirm-plan'].includes(arg) && args[index + 1] && !args[index + 1].startsWith('--') && !values[arg]) {
       values[arg] = args[++index];
     } else throw new MigrationError('INVALID_MIGRATION_ARGUMENTS');
   }
-  if (modes.length > 1 || (createDatabase && modes[0] !== '--apply')) throw new MigrationError('INVALID_MIGRATION_ARGUMENTS');
-  return { mode: modes[0] ?? '--plan', createDatabase, values };
+  if (modes.length > 1 || ((createDatabase || maintenanceConfirmed) && modes[0] !== '--apply')) throw new MigrationError('INVALID_MIGRATION_ARGUMENTS');
+  return { mode: modes[0] ?? '--plan', createDatabase, maintenanceConfirmed, values };
 }
 
 let connection;
@@ -34,7 +36,7 @@ try {
   const tls = await inspectConnection(connection, null);
   const status = await migrationStatus(connection, options.database, plan);
   const report = { action: args.mode.slice(2), host: options.host, port: options.port, tls,
-    ...status, migrations: plan.migrations.map(({ version, file, checksum, statements }) => ({ version, file, checksum, statements: statements.length })) };
+    ...status, migrations: plan.migrations.map(({ version, file, mode, checksum, statements }) => ({ version, file, mode: mode ?? 'ADDITIVE', checksum, statements: statements.length })) };
   if (args.mode === '--plan') console.log(JSON.stringify(report));
   else if (args.mode === '--verify') {
     if (!status.exists || status.pending.length) throw new MigrationError('MIGRATIONS_NOT_FULLY_APPLIED');
@@ -42,6 +44,7 @@ try {
   } else {
     const applied = await applyMigrations(connection, options.database, plan, {
       createDatabase: args.createDatabase,
+      maintenanceConfirmed: args.maintenanceConfirmed,
       onProgress: ({ event, database, backup, stage, backupFile, file, completed, total }) => {
         if (event === 'database_created') console.log(JSON.stringify({ action: event, database }));
         if (event?.startsWith('v3_')) console.log(JSON.stringify({ action: event, database, backup, stage, backupFile }));

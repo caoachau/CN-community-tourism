@@ -1,0 +1,39 @@
+{
+  "migration": "003_survey_schema.sql",
+  "conceptualModel": "Community_Tourism_Sau_Khao_Sat.cdm",
+  "mysql": "8.4",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "storedTimestamps": "UTC",
+  "currency": "VND",
+  "entities": [
+    {"code":"users","name":"Người dùng","tables":["users"]},
+    {"code":"households","name":"Hộ dân","tables":["households"]},
+    {"code":"places","name":"Điểm phục vụ","tables":["places","content_revisions"],"rule":"Địa chỉ, tọa độ và hướng dẫn lấy từ revision PLACE đã công khai; không tự tạo địa điểm từ dữ liệu cũ."},
+    {"code":"categories","name":"Danh mục","tables":["categories"],"rule":"SERVICE, PRODUCT, CONTENT; FK ghép bắt buộc đúng loại."},
+    {"code":"rooms","name":"Phòng lưu trú","tables":["rooms"]},
+    {"code":"services","name":"Dịch vụ và trải nghiệm","tables":["services"]},
+    {"code":"offers","name":"Phương thức bán dịch vụ","tables":["service_offers"]},
+    {"code":"resources","name":"Nguồn lực phục vụ","tables":["resources"]},
+    {"code":"slots","name":"Lịch dịch vụ","tables":["service_slots"]},
+    {"code":"resource_calendar","name":"Lịch nguồn lực và ngừng phục vụ","tables":["slot_resource_assignments","availability_blocks"],"rule":"Phân công lấy thời gian slot cộng khoảng chuẩn bị/thu dọn; chặn có thể chưa rõ giờ kết thúc. Không sao chép occupancy booking vào block."},
+    {"code":"requests","name":"Yêu cầu của khách","tables":["schedule_requests","product_inquiries"],"rule":"Giữ hai miền ID độc lập. schedule_requests dùng PRIVATE_SCHEDULE/SERVICE_INQUIRY/BOOKING_CHANGE; hỏi sản phẩm giữ bảng cũ, không chuyển thành đơn bán."},
+    {"code":"options","name":"Phương án và cam kết đặt","tables":["booking_proposals","reservation_sets"],"rule":"proposal lưu trao đổi/phiên bản gửi khách; reservation_set lưu cam kết và snapshot từng phiên bản booking. Đổi lịch có base_set_id cùng đơn. Trạng thái quyết định không thay thế trạng thái giữ chỗ."},
+    {"code":"bookings","name":"Đơn đặt dịch vụ","tables":["bookings"],"rule":"current_reservation_set_id chọn phương án hiện hành. accepted_proposal_id chỉ giữ nguồn hình thành ban đầu. Tổng/ngày trên booking là bản tổng hợp hiện hành; lịch sử bất biến nằm ở set/items."},
+    {"code":"items","name":"Hạng mục đặt","tables":["booking_items"],"rule":"preparations là danh sách có JSON Schema; cập nhật ghi activity_events. Người cam kết, người thực đến, lượng tính tiền và lượng thực phục vụ độc lập. source_item_id ánh xạ hạng mục trước khi đổi."},
+    {"code":"cash_transactions","name":"Giao dịch tiền thực tế","tables":["financial_entries"],"filter":"entry_type IN ('RECEIPT','REFUND','OTHER_INCOME','EXPENSE')","rule":"Cọc là RECEIPT/DEPOSIT; dòng đảo đảo dấu dòng gốc, không tạo doanh thu mới."},
+    {"code":"refund_obligations","name":"Nghĩa vụ hoàn tiền","tables":["financial_entries"],"filter":"entry_type = 'REFUND_AGREEMENT'","rule":"REFUND_ADJUSTMENT tham chiếu gốc bằng agreement_id; REFUND là tiền thực. Nguồn XOR booking_id/deposit_credit_id. Không cộng nghĩa vụ vào thực thu/thực hoàn."},
+    {"code":"deposit_credits","name":"Quyền bảo lưu cọc","tables":["deposit_credits"],"rule":"Nguồn là khoản RECEIPT/DEPOSIT; cùng hộ/người hưởng. Số dư tính từ movements và hoàn thực, không có cột balance tùy ý."},
+    {"code":"products","name":"Sản phẩm địa phương","tables":["local_products"]},
+    {"code":"content","name":"Nội dung giới thiệu","tables":["cultural_articles"],"rule":"Giữ tên vật lý để bảo toàn tương thích; content_kind phân biệt văn hóa, điểm đến, nguồn gốc và hướng dẫn."},
+    {"code":"revisions","name":"Phiên bản nội dung","tables":["content_revisions","revision_media"],"rule":"XOR đúng một trong sáu gốc; CONTENT trong CDM ánh xạ ARTICLE ở SQL. Pointer công khai trỏ revision đúng gốc; API kiểm APPROVED."},
+    {"code":"feedback","name":"Phản hồi","tables":["reviews","complaints"],"rule":"reviews là REVIEW; complaints là COMPLAINT/INCIDENT. Giữ miền ID và quyền riêng tư riêng. INCIDENT gắn hạng mục, REVIEW vẫn một đánh giá mỗi booking hoàn thành."}
+  ],
+  "associationsWithAttributes": [
+    {"code":"slot_offer","tables":["slot_offers"]},
+    {"code":"resource_rule","tables":["slot_offer_resource_rules"]},
+    {"code":"item_usage","tables":["item_resource_usages","resource_handovers"]},
+    {"code":"credit_booking","tables":["deposit_credit_movements"]}
+  ],
+  "technicalTables": ["auth_sessions","idempotency_keys","activity_events","notifications"],
+  "migrationHistoryTable": "schema_migrations"
+}

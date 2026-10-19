@@ -12,6 +12,7 @@
     "db:migrate:plan": "node --env-file-if-exists=.env scripts/migrate.js --plan",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js --apply",
     "db:migrate:verify": "node --env-file-if-exists=.env scripts/migrate.js --verify",
+    "db:schema:export": "node --env-file-if-exists=.env.test scripts/export-survey-schema.js",
     "test": "node --test test/*.test.js",
     "test:integration": "node --env-file-if-exists=.env.test scripts/run-integration-tests.js",
     "test:all": "npm test && npm run test:integration",
