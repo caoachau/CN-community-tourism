@@ -11,6 +11,7 @@ import { createAdminAccountRouter } from './auth/admin-router.js';
 import { createHouseholdRouter, createHouseholdAdminRouter } from './households/router.js';
 import { createPublicCatalogRouter, createOwnedPlaceRouter, createCategoryAdminRouter, createPlaceReviewRouter } from './catalog/router.js';
 import { createOwnedServiceRouter,createServiceReviewRouter,createPublicServiceRouter } from './services/router.js';
+import { createOwnedRoomRouter,createRoomReviewRouter,createPublicRoomRouter } from './rooms/router.js';
 
 export function createApp({
   checkDatabase,
@@ -22,6 +23,7 @@ export function createApp({
   householdService,
   catalogService,
   serviceService,
+  roomService,
   trustProxy = 0,
 } = {}) {
   const app = express();
@@ -86,6 +88,13 @@ export function createApp({
     if(authService){
       app.use('/api/v1/households/me/services',createOwnedServiceRouter(serviceService,authService));
       app.use('/api/v1/admin/service-submissions',createServiceReviewRouter(serviceService,authService));
+    }
+  }
+  if (roomService) {
+    app.use('/api/v1/public/rooms',createPublicRoomRouter(roomService));
+    if (authService) {
+      app.use('/api/v1/households/me/rooms',createOwnedRoomRouter(roomService,authService));
+      app.use('/api/v1/admin/room-submissions',createRoomReviewRouter(roomService,authService));
     }
   }
   if (apiRouter) app.use('/api/v1', apiRouter);

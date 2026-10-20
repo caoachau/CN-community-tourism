@@ -30,6 +30,8 @@ The catalog module adds global ADMIN-managed SERVICE/PRODUCT/CONTENT categories 
 
 Services/experiences and selling offers use `/api/v1/households/me/services`, `/api/v1/admin/service-submissions`, and `/api/v1/public/services`. A submitted service revision snapshots its content, category/location/default duration and offer structures. New or changed selling structures require review; live base/addon prices and sale flags can change without rewriting historical commitments. Input distinguishes person/group/trip/package/hour/unit pricing and requires explicit resource-free addons. Public reads gate all related publication states and expose only approved active offers. The module uses schema 003 with no new migration; calendar/resource availability and booking APIs are separate work.
 
+Rooms use `/api/v1/households/me/rooms`, `/api/v1/admin/room-submissions`, and `/api/v1/public/rooms`. Each row is one individually reservable room. Guest capacity, arrival/departure times, owned place, amenities and terms are versioned; the previous approved content stays public while edits await review. Current whole-VND nightly prices have separate concurrency tokens and never rewrite historical prices. Active room holds/commitments prevent changes to place, capacity or arrival/departure times. Public capacity/price search does not assert date availability. No additional migration is needed; see [API.md](API.md) for payloads and rules.
+
 ## Render
 
 See [RENDER.md](RENDER.md) and the root [render.yaml](../render.yaml). With `rootDir: backend`, Build Command is `npm ci --omit=dev --no-audit --no-fund` and Start Command is `npm start`.

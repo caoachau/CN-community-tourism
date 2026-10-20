@@ -50,7 +50,7 @@ Hạng mục được truy ngược qua tập giữ chỗ tới booking/phương
 
 Các lookup sau khảo sát yêu cầu migration `003`. `incident` chỉ trả dòng `complaints.feedback_kind='INCIDENT'`, không cho hộ đọc phản ánh riêng tư qua cùng guard. Đây là chính sách truy quyền; chưa bổ sung endpoint nghiệp vụ điểm phục vụ, cọc hoặc giao/trả.
 
-Các guard này là nền để các module phòng/dịch vụ/booking tích hợp khi triển khai API; chưa có endpoint nghiệp vụ cho các module đó. Khi tải dữ liệu sau guard phải giữ điều kiện chủ sở hữu trong truy vấn. Các thao tác ghi phải kiểm tra lại tài khoản, phiên, role, household và đối tượng dưới khóa trong chính transaction, tránh dùng kết quả middleware cũ để ghi dữ liệu. Đây cũng là nguyên tắc kiểm tra từng request và từng quan hệ sở hữu trong [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+Các guard này là nền cho các module nghiệp vụ. API phòng và dịch vụ đã triển khai ở các mục bên dưới; API booking chưa triển khai. Khi tải dữ liệu sau guard phải giữ điều kiện chủ sở hữu trong truy vấn. Các thao tác ghi phải kiểm tra lại tài khoản, phiên, role, household và đối tượng dưới khóa trong chính transaction, tránh dùng kết quả middleware cũ để ghi dữ liệu. Đây cũng là nguyên tắc kiểm tra từng request và từng quan hệ sở hữu trong [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
 
 API quản trị đã triển khai:
 
@@ -276,6 +276,74 @@ Admin chỉ duyệt đúng latest revision/version; snapshot cấu trúc phải 
 Public lọc theo householdId/categoryId/placeId, pricingType, participationMode, q (tên/mô tả đã công khai, wildcard được escape). Bộ lọc mode và pricing phải khớp **cùng một offer**. Hộ/điểm/dịch vụ phải đang hiển thị/cung cấp, chưa archived; hộ APPROVED, chủ hộ ACTIVE/HOUSEHOLD, category SERVICE đang active và cả ba pointer nội dung HOUSEHOLD/PLACE/SERVICE phải trỏ bản APPROVED đúng gốc. Chỉ lấy offer active có trong `offers_snapshot` của bản công khai và đúng cấu trúc; dịch vụ không còn offer phù hợp bị ẩn/404. Khách không nhận draft, review note, tác giả/email hoặc các token nội bộ. Các danh sách quản lý tải bản hồ sơ và offer theo lô.
 
 Snapshot dùng JSON vì thuộc tính cấu hình cần giữ nguyên theo phiên bản; ID quan hệ nghiệp vụ chính vẫn ở các cột/FK có sẵn. Kiểm tra ID offer trong snapshot và truy vấn public dùng [MySQL 8.4 JSON_CONTAINS](https://dev.mysql.com/doc/refman/8.4/en/json-search-functions.html); quyền vẫn được kiểm trên đối tượng/hộ thực tế theo [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+
+## Phòng lưu trú
+
+Phòng là loại cung cấp tùy chọn. Mỗi `rooms` đại diện **một phòng có thể được đặt riêng**, không phải loại phòng với số lượng tồn; nhiều phòng tạo nhiều bản ghi. Hộ chỉ cung cấp trải nghiệm vẫn hoạt động bình thường. Module dùng `rooms`, `places`, `content_revisions` loại ROOM, audit/thông báo trong schema 003; **không cần migration mới**.
+
+| Endpoint | Quyền | Chức năng |
+| --- | --- | --- |
+| `GET /api/v1/households/me/rooms` | HOUSEHOLD | Danh sách phòng của hộ đang sở hữu, phân trang. |
+| `POST /api/v1/households/me/rooms` | HOUSEHOLD, hộ APPROVED | Tạo phòng và bản nháp đầu tiên. |
+| `GET /api/v1/households/me/rooms/{roomId}` | Chủ hộ | Xem cấu hình hiện hành, bản mới nhất và bản đã công khai. |
+| `PUT /api/v1/households/me/rooms/{roomId}/profile` | Chủ hộ, hộ APPROVED | Tạo phiên bản nháp mới bằng `revisionId`, `version`. |
+| `POST /api/v1/households/me/rooms/{roomId}/submissions` | Chủ hộ, hộ APPROVED | Gửi đúng bản nháp, kiểm `pricingToken` và chụp giá tại thời điểm gửi. |
+| `GET /api/v1/households/me/rooms/{roomId}/revisions` | Chủ hộ | Lịch sử nội dung và kết quả xét duyệt. |
+| `PATCH /api/v1/households/me/rooms/{roomId}/pricing` | Chủ hộ, hộ APPROVED | Đổi giá hiện hành theo đêm, có token và lý do. |
+| `PATCH /api/v1/households/me/rooms/{roomId}/status` | Chủ hộ | Tạm ngừng/ngừng hẳn cung cấp, ẩn/hiện nội dung. |
+| `GET /api/v1/admin/room-submissions` | ADMIN | Lọc bản đã gửi theo `status`, `householdId`, phân trang. |
+| `GET /api/v1/admin/room-submissions/{revisionId}` | ADMIN | Xem đúng bản đã gửi; bản nháp trả 404. |
+| `POST /api/v1/admin/room-submissions/{revisionId}/review` | ADMIN | Duyệt/từ chối phiên bản mới nhất. |
+| `GET /api/v1/public/rooms` | Khách vãng lai | Lọc phòng công khai theo hộ, điểm, từ khóa, sức chứa và giá. |
+| `GET /api/v1/public/rooms/{roomId}` | Khách vãng lai | Chi tiết phòng đang đủ điều kiện công khai. |
+
+Route `/me` lấy hộ từ tài khoản và kiểm sở hữu trong truy vấn. Không nhận `householdId`, chủ sở hữu, code, trạng thái duyệt, pointer công khai hoặc `pricingType` trong body. ADMIN không có quyền quản lý phòng thay hộ. HOUSEHOLD vẫn kế thừa CUSTOMER. Tất cả response dùng envelope chung và `Cache-Control: no-store`.
+
+Ví dụ tạo phòng:
+
+```json
+{
+  "title": "Phòng Hoa Sen",
+  "body": "Phòng nghỉ hướng vườn, thoáng mát và phù hợp gia đình nhỏ.",
+  "placeId": "1",
+  "maxGuests": 4,
+  "nightlyPriceVnd": 400000,
+  "checkInTime": "14:00",
+  "checkOutTime": "12:00",
+  "terms": {"includedItems": ["Nước uống"], "excludedItems": ["Ăn sáng"]},
+  "details": {"amenities": ["Điều hòa", "Wi-Fi"], "houseRules": ["Giữ yên tĩnh sau 22 giờ"]}
+}
+```
+
+Nháp cần `title`, `maxGuests`, `nightlyPriceVnd`; mặc định mô tả rỗng, điểm null, nhận phòng 14:00, trả phòng 12:00, các danh sách rỗng. Điểm được chọn phải thuộc chính hộ, chưa archive/ngừng hẳn; khi gửi và duyệt phải có điểm đã APPROVED, VISIBLE, AVAILABLE. Gửi cần tên tối thiểu 3 ký tự và mô tả 20 ký tự. Hộ và tài khoản phải còn đủ quyền trong transaction.
+
+Giới hạn API: sức chứa 1–1.000 người/phòng; giá là số nguyên VND 0–999.999.999.999.999; không nhận chuỗi, tiền lẻ hoặc giá âm. Giờ chỉ nhận `HH:mm` từ 00:00 đến 23:59 theo `Asia/Ho_Chi_Minh`. Giờ trả phòng nằm ở **ngày trả**, nên 14:00 nhận/12:00 trả hợp lệ. `terms` có tối đa 32 khoản bao gồm và 32 khoản không bao gồm; `details` tối đa 50 tiện nghi, 32 nội quy; mỗi mục 1–500 ký tự. Không nhận trường JSON tùy ý hoặc thực thi HTML. Phụ phí có tài nguyên hữu hạn không được biểu diễn như một khoản bán không kiểm tra khả dụng.
+
+Response riêng có `{room,profile,publishedProfile}`. `room` là cấu hình vận hành/giá hiện hành; `profile` là bản mới nhất; `publishedProfile` là bản đang được công khai hoặc null. PUT profile gửi các trường nội dung như ví dụ, bỏ `nightlyPriceVnd`, thêm `revisionId` và `version` từ `profile`. Mỗi lần lưu tạo DRAFT mới; không sửa PENDING hoặc ghi đè revision cũ. Điểm, số khách tối đa, giờ nhận/trả và điều kiện trong bản nháp chỉ cập nhật sang root khi được duyệt. Trong lúc chờ hoặc khi bị từ chối, bản công khai cũ tiếp tục hiển thị.
+
+Gửi xét duyệt bằng:
+
+```json
+{"revisionId":"12","version":2,"pricingToken":"<room.pricingToken-vua-doc>"}
+```
+
+Mã và phiên bản phải đúng bản mới nhất; giá thay đổi trước lúc gửi làm `pricingToken` cũ trả `STALE_VERSION`. Hệ thống lưu giá lúc gửi vào `profile.nightlyPriceSnapshotVnd`. Gửi lặp cùng bản PENDING trả `changed=false`, không tạo thêm audit. ADMIN review dùng `{"version":2,"decision":"APPROVED"}` hoặc REJECTED kèm `reason`; cùng ADMIN/quyết định/lý do trên bản còn mới nhất trả `changed=false`. Quyết định xung đột hoặc phiên bản cũ trả 409. Duyệt không tự mở phòng đã tạm ngừng/ẩn và không nâng quyền chủ hộ.
+
+Đổi giá qua `/pricing`:
+
+```json
+{"expectedToken":"<room.pricingToken-vua-doc>","nightlyPriceVnd":450000,"reason":"Cập nhật giá áp dụng cho yêu cầu mới"}
+```
+
+Giá mới có hiệu lực cho danh mục công khai ngay, kể cả lúc bản sửa đang chờ duyệt. Phép đổi giá không sửa snapshot trong revision đã gửi, phương án, reservation set hoặc booking item. Duyệt nội dung cũng không khôi phục giá cũ. Token giá tách khỏi tham chiếu nội dung để hai thiết bị không ghi đè giá mới; dùng đúng token với cùng giá là no-op. Giá phòng là **một phòng/một đêm**, không nhân số khách. Số đêm và tổng tiền sẽ được backend tính theo ngày nhận/trả khi triển khai booking; API này chưa báo giá hay giữ phòng.
+
+Đổi trạng thái dùng `{expectedState:{supplyStatus,visibility},supplyStatus,visibility,reason}`. AVAILABLE/PAUSED/RETIRED độc lập VISIBLE/HIDDEN; RETIRED không được mở lại. Hộ bị thu hồi duyệt vẫn đọc phòng/lịch sử, tạm ngừng hoặc ngừng hẳn và ẩn phòng, nhưng không tạo/sửa/gửi nội dung, đổi giá hoặc mở nhận đặt. Phòng archive vẫn đọc lịch sử nhưng không sửa. Ngừng cung cấp/ẩn không giải phóng hay hủy booking cũ.
+
+Khi còn hạng mục phòng chưa giải phóng, chưa kết thúc trong reservation set COMMITTED hoặc HELD còn hạn, việc đổi **điểm, sức chứa, giờ nhận/trả** không được gửi/duyệt (`ROOM_CONFIGURATION_LOCKED`, 409). Vẫn được sửa nội dung giới thiệu và điều kiện áp dụng cho giao dịch tương lai; cam kết cũ giữ snapshot riêng. Kiểm lại cam kết ở cả submit và approve; HELD hết hạn không chặn dù worker chưa đổi trạng thái. Truy vấn dùng locking read hiện hành, không dựa trên snapshot đọc trước khi lấy khóa. Quy tắc khóa: user ID tăng dần → session → hộ → phòng → revision → điểm → hạng mục/cam kết. Engine booking tương lai phải khóa hộ và các phòng theo ID tăng dần trước khi kiểm tra/tạo giữ chỗ hoặc cam kết.
+
+Public chỉ lấy pointer APPROVED của phòng, hộ và điểm; cả ba phải chưa archive, VISIBLE và đang cho phép cung cấp, chủ hộ ACTIVE/HOUSEHOLD, hộ APPROVED. Không lộ nháp, review note, tài khoản, token hoặc giá chụp trong lịch sử kiểm duyệt. Query hỗ trợ `page`, `pageSize`, `householdId`, `placeId`, `q`, `guests`, `minPriceVnd`, `maxPriceVnd`; `guests` kiểm `maxGuests >= guests`, khoảng giá bao gồm hai đầu. Từ khóa `%`, `_`, `!` được tìm theo ký tự thường, không biến thành wildcard SQL. Kết quả **không xác nhận còn phòng theo ngày**; chưa nhận ngày đến/ngày đi ở endpoint này.
+
+Lỗi riêng: `ROOM_PROFILE_INCOMPLETE` (422), `ROOM_PLACE_NOT_READY` (409), `ROOM_CONFIGURATION_LOCKED` (409). Validation/ownership/trạng thái dùng mã chung. Ghi root/revision, audit và thông báo xét duyệt cùng commit/rollback. Không có xóa cứng, upload ảnh, lịch phòng, chặn phòng hoặc đặt phòng trong module này.
 
 ## Phản hồi và request ID
 

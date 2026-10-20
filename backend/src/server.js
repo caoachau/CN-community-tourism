@@ -11,6 +11,8 @@ import { createCatalogRepository } from './catalog/repository.js';
 import { createCatalogService } from './catalog/service.js';
 import { createServiceRepository } from './services/repository.js';
 import { createServiceService } from './services/service.js';
+import { createRoomRepository } from './rooms/repository.js';
+import { createRoomService } from './rooms/service.js';
 
 const port = Number(process.env.PORT ?? '5000');
 let database;
@@ -30,7 +32,8 @@ try {
   const householdService = createHouseholdService({ repository: createHouseholdRepository(database) });
   const catalogService = createCatalogService({ repository: createCatalogRepository(database) });
   const serviceService = createServiceService({ repository: createServiceRepository(database) });
-  const app = createApp({ checkDatabase: () => database.check(), logger, authService, householdService, catalogService, serviceService, trustProxy: options.trustProxy });
+  const roomService = createRoomService({ repository: createRoomRepository(database) });
+  const app = createApp({ checkDatabase: () => database.check(), logger, authService, householdService, catalogService, serviceService, roomService, trustProxy: options.trustProxy });
   server = await new Promise((resolve, reject) => {
     const listener = app.listen(port, '0.0.0.0', () => resolve(listener));
     listener.once('error', reject);

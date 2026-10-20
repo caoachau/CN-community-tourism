@@ -3,6 +3,7 @@ import { authOpenApi } from './auth/openapi.js';
 import { householdOpenApi } from './households/openapi.js';
 import { catalogOpenApi } from './catalog/openapi.js';
 import { servicesOpenApi } from './services/openapi.js';
+import { roomsOpenApi } from './rooms/openapi.js';
 
 const reference = (name) => ({ $ref: `#/components/schemas/${name}` });
 const requestIdHeader = {
@@ -25,6 +26,7 @@ const auth = authOpenApi({ reference, jsonResponse, successSchema });
 const households = householdOpenApi({ reference, jsonResponse, successSchema });
 const catalog = catalogOpenApi({ reference, jsonResponse, successSchema });
 const services = servicesOpenApi({ reference, jsonResponse, successSchema });
+const rooms = roomsOpenApi({ reference, jsonResponse, successSchema });
 
 export const openApiDocument = {
   openapi: '3.0.3',
@@ -43,6 +45,7 @@ export const openApiDocument = {
     { name: 'Households', description: 'Own household onboarding and versioned profiles; CUSTOMER and HOUSEHOLD' },
     { name: 'Places', description: 'Household-owned service locations and versioned content' },
     { name: 'Services', description: 'Household services/experiences, moderated versions and selling offers' },
+    { name: 'Rooms', description: 'Household lodging, nightly pricing and moderated content versions' },
     { name: 'Public catalog', description: 'Active categories and approved, available locations; no account required' },
   ],
   paths: {
@@ -50,6 +53,7 @@ export const openApiDocument = {
     ...households.paths,
     ...catalog.paths,
     ...services.paths,
+    ...rooms.paths,
     '/api/health': {
       get: {
         operationId: 'getHealth',
@@ -96,6 +100,7 @@ export const openApiDocument = {
       ...households.schemas,
       ...catalog.schemas,
       ...services.schemas,
+      ...rooms.schemas,
       ResponseMeta: {
         type: 'object',
         required: ['requestId'],
