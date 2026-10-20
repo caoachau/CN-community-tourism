@@ -8,7 +8,7 @@ Sau khi cấu hình database/TLS và chạy `npm run dev:backend` từ root:
 - OpenAPI 3.0.3: `http://localhost:5000/api/openapi.json`.
 - Liveness: `GET /api/health`; readiness kiểm tra MySQL/TLS: `GET /api/ready`.
 
-Swagger mô tả health/readiness, xác thực, quản trị tài khoản, hồ sơ hộ, danh mục và điểm phục vụ. OpenAPI được khai báo trong `src/openapi.js` và các module `auth`, `households`, `catalog`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài. Các API booking chưa được triển khai.
+Swagger mô tả health/readiness, xác thực, quản trị tài khoản, hồ sơ hộ, danh mục, điểm phục vụ và dịch vụ/trải nghiệm. OpenAPI được khai báo trong `src/openapi.js` và các module `auth`, `households`, `catalog`, `services`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài. Các API booking chưa được triển khai.
 
 ## Đăng ký, đăng nhập và phiên JWT
 
@@ -180,6 +180,102 @@ Trạng thái cung cấp gồm AVAILABLE, PAUSED, RETIRED; hiển thị VISIBLE/
 Public không cần đăng nhập và luôn `Cache-Control: no-store`. Cả list và detail chỉ lấy đúng `published_revision_id` đã APPROVED của PLACE và HOUSEHOLD; root phải VISIBLE/chưa archived, hộ APPROVED, tài khoản chủ ACTIVE/chưa disabled/vai trò HOUSEHOLD, điểm AVAILABLE. Không đạt một điều kiện thì bị loại khỏi list; detail trả cùng 404 như ID không có. Bản sửa của hộ/điểm đang chờ duyệt không thay nội dung khách đang xem. Response public có nội dung, địa chỉ và điện thoại **đã được duyệt**, không có owner user ID, email tài khoản, metadata tác giả, review note, trạng thái nháp hoặc JSON ngoài danh sách trường công khai; tọa độ cũng chỉ chiếu đúng hai trường số.
 
 `q` (1–100 ký tự) tìm trong tên/địa chỉ của bản công khai, `locality` (1–200) lọc địa phương. Truy vấn tham số hóa và escape `%`, `_`, `!` thành ký tự thường khi tìm, theo [MySQL 8.4 LIKE/ESCAPE](https://dev.mysql.com/doc/refman/8.4/en/string-comparison-functions.html). Danh sách quản lý tải bản mới nhất và bản công khai theo lô; không phát sinh truy vấn riêng cho từng điểm. Chính sách truy dữ liệu theo từng quan hệ và tách response công khai dựa trên [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+
+## Dịch vụ/trải nghiệm và ServiceOffer
+
+Module `src/services/` dùng các bảng hiện có của migration 003, không thêm bảng/migration. Một dịch vụ thuộc một hộ, có danh mục SERVICE, điểm phục vụ mặc định và nhiều phương thức bán. Phương thức bán là cấu hình thương mại, không phải lịch hoặc tài nguyên; sức chứa còn lại và quyền thuê riêng sẽ được kiểm tra bởi engine lịch/booking.
+
+| API | Chức năng |
+| --- | --- |
+| `GET/POST /api/v1/households/me/services` | Hộ xem danh sách/tạo dịch vụ DRAFT. |
+| `GET /api/v1/households/me/services/{serviceId}` | Hồ sơ mới nhất, bản công khai, mọi offer hiện hành và `offersToken`. |
+| `PUT /api/v1/households/me/services/{serviceId}/profile` | Lưu DRAFT mới với `revisionId`, `version` và toàn bộ nội dung. |
+| `POST /api/v1/households/me/services/{serviceId}/submissions` | Gửi `{revisionId,version,offersToken}` để xét duyệt. |
+| `GET /api/v1/households/me/services/{serviceId}/revisions` | Lịch sử phiên bản và snapshot offer đã gửi. |
+| `PATCH /api/v1/households/me/services/{serviceId}/status` | Đổi supplyStatus/visibility, cần expectedState và reason. |
+| `POST /api/v1/households/me/services/{serviceId}/offers` | Tạo phương thức bán; mặc định đang bật, tối đa 32 offer active/dịch vụ. |
+| `GET /api/v1/households/me/services/{serviceId}/offers/{offerId}` | Xem cấu hình, token và offersToken mới nhất. |
+| `PUT /api/v1/households/me/services/{serviceId}/offers/{offerId}` | `{expectedToken,reason,configuration}` để sửa cấu hình chưa bị khóa. |
+| `PATCH /api/v1/households/me/services/{serviceId}/offers/{offerId}/pricing` | Đổi giá/bật tắt offer hoặc giá/trạng thái phụ phí đang có. |
+| `GET /api/v1/admin/service-submissions` | ADMIN xem hàng đợi theo status PENDING/APPROVED/REJECTED, householdId. |
+| `GET /api/v1/admin/service-submissions/{revisionId}` | ADMIN xem đúng hồ sơ và snapshot đã gửi. |
+| `POST /api/v1/admin/service-submissions/{revisionId}/review` | `{version,decision,reason?}`; từ chối phải có lý do. |
+| `GET /api/v1/public/services` | Khách tìm dịch vụ công khai, không cần tài khoản. |
+| `GET /api/v1/public/services/{serviceId}` | Khách xem nội dung, điểm phục vụ và offer đã công khai. |
+
+Tất cả dùng envelope chung và `Cache-Control: no-store`; các danh sách hỗ trợ page/pageSize theo giới hạn dùng chung. Các route quản lý yêu cầu HOUSEHOLD hiện hành và đúng hộ sở hữu. Hộ APPROVED mới tạo/lưu/gửi hoặc chỉnh cấu hình; ADMIN chỉ duyệt nội dung, không quản lý giá/dịch vụ thay hộ. ID không tồn tại/khác hộ/sai quan hệ service–offer đều trả 403 ở route quản lý. Tài khoản/role/phiên/ownership được kiểm lại trong transaction dưới thứ tự khóa chung: user tăng dần → session actor → hộ → service → revision/offer và các tham chiếu cần kiểm tra.
+
+Ví dụ mở dịch vụ:
+
+```json
+{
+  "title": "Trải nghiệm giăng lưới bắt cá",
+  "body": "Cùng gia đình giăng lưới, thu hoạch cá và tìm hiểu nghề địa phương.",
+  "categoryId": "1",
+  "defaultPlaceId": "1",
+  "defaultDurationMinutes": 180,
+  "details": {
+    "participationConditions": ["Trẻ em đi cùng người lớn"],
+    "preparationNotes": ["Mang quần áo thay"]
+  }
+}
+```
+
+Nháp cần title, categoryId và defaultDurationMinutes; body mặc định rỗng, defaultPlaceId có thể null. Category phải đang active và kind=SERVICE; place khi có phải cùng hộ, chưa archived/RETIRED. Thời lượng mặc định 1–10.080 phút là giới hạn kỹ thuật MVP, không phải lịch thực tế. Gửi duyệt cần tên tối thiểu 3, mô tả 20 ký tự, điểm phục vụ đã được duyệt/VISIBLE/AVAILABLE và 1–32 offer active hợp lệ; mỗi `terms.scopeDescription` cần ít nhất 10 ký tự để nói rõ phạm vi cung cấp. Các mảng điều kiện/chuẩn bị tối đa 20 chuỗi, mỗi chuỗi 1.000 ký tự. Không nhận giá, chủ sở hữu hoặc quyền trong `details`.
+
+Category/place/default duration được lưu trong `content_revisions.details` cùng nội dung; khi sửa, các cột gốc của bản đang công khai giữ nguyên cho tới khi Admin duyệt. Giá và lịch sử booking không đọc lại từ nội dung nháp. Submit chụp `offers_snapshot` từ server dưới khóa; `offersToken` là fingerprint toàn bộ offer của dịch vụ để không gửi nhầm cấu hình đã đổi từ lúc người dùng xem. Fingerprint là kiểm soát phiên bản, không thay quyền sở hữu. Bản PENDING không sửa nội dung; gửi lặp đúng bản PENDING là no-op. Khi bị từ chối, lưu nháp mới rồi gửi lại.
+
+Ví dụ tạo offer bắt cá ghép:
+
+```json
+{
+  "name": "Khách ghép",
+  "participationMode": "SHARED",
+  "pricingType": "PER_PERSON",
+  "unitPriceVnd": 150000,
+  "minParticipants": 1,
+  "maxParticipants": 10,
+  "terms": {
+    "scopeDescription": "Một người tham gia toàn bộ buổi giăng lưới bắt cá.",
+    "includedItems": ["Hướng dẫn của hộ dân"],
+    "excludedItems": []
+  },
+  "addons": [],
+  "isActive": true
+}
+```
+
+| pricingType | quantityRule trả về | Quy tắc |
+| --- | --- | --- |
+| PER_PERSON | PARTICIPANT_COUNT | Số lượng tính tiền bằng số khách tham gia. |
+| PER_GROUP/PER_TRIP/FIXED_PACKAGE | ONE | Một nhóm/chuyến/gói của chính dịch vụ trong một hạng mục; không phải combo nhiều hộ. |
+| PER_HOUR | SLOT_DURATION_HOURS | Backend lấy giờ từ thời gian lịch, không nhận số giờ tùy ý từ khách. |
+| PER_UNIT | SELECTED_UNITS | Khách chọn số đơn vị cho trọn lịch; cần maxUnits và participantsPerUnit. |
+
+`participationMode=SHARED/EXCLUSIVE` độc lập cách tính tiền; EXCLUSIVE sẽ phải giữ độc quyền slot khi xây engine đặt. `maxParticipants` là giới hạn một hạng mục của phương thức, không phải tổng chỗ còn lại. Cả min/max người và giới hạn đơn vị là số nguyên 1–100.000, min không vượt max. PER_UNIT bắt buộc nhãn đơn vị, maxUnits/participantsPerUnit dương, maxParticipants không vượt tích hai giới hạn đó. Các loại khác để hai giới hạn đơn vị null; nhãn được tự đặt theo người/nhóm/chuyến/gói/giờ, nếu gửi phải trùng nhãn chuẩn. Không suy công thức từ tên hoặc unitLabel, không nhận participantCount/quantity/resourceUsages như thuộc tính cấu hình offer. Tiền VND nguyên 0–999.999.999.999.999; engine đặt còn phải kiểm tổng tiền và overflow khi có số lượng thực tế.
+
+Addons chỉ dành cho khoản không cần giữ tài nguyên riêng: tối đa 32 phần tử, key ASCII duy nhất, tên 150 ký tự, giá nguyên, maxQuantity 1–100.000, isActive boolean và **resourceFree=true bắt buộc**. Không nhận resourceId; xe/áo phao hữu hạn phải qua module tài nguyên. Included/excluded tối đa 32 chuỗi, mỗi chuỗi 500 ký tự; scopeDescription tối đa 2.000. Key/tên/giới hạn phụ phí là một phần cấu trúc không được đổi nghĩa sau khi đã dùng.
+
+Cấu trúc offer (tên, mode, pricingType, đơn vị, giới hạn, terms và danh tính/giới hạn addons) sửa được trước khi gửi/dùng. Một khi offer có mặt trong phiên bản đã gửi hoặc được slot/booking tham chiếu, sửa cấu trúc trả `OFFER_CONFIGURATION_LOCKED` (409): tạo offer thay thế, tắt offer cũ, lưu một bản DRAFT mới của dịch vụ và gửi duyệt. Không tạo/sửa cấu trúc trong lúc đang PENDING. Offer mới trên dịch vụ đã công khai chưa xuất hiện cho khách cho tới khi được đưa vào bản mới được duyệt.
+
+Giá và trạng thái bán cập nhật độc lập qua `/pricing`, kể cả lúc đang PENDING; phải gửi `expectedToken` hiện hành và `reason`. Có thể gửi `unitPriceVnd`, `isActive` và/hoặc `addonPrices: [{key,unitPriceVnd?,isActive?}]`; chỉ được dùng key đã tồn tại, không trùng key, ít nhất một trường thay đổi mỗi phần tử. Không thay đổi trả changed=false; stale token trả 409. Ví dụ:
+
+```json
+{
+  "expectedToken": "<token 64 ký tự từ GET offer>",
+  "reason": "Cập nhật giá phục vụ",
+  "unitPriceVnd": 180000,
+  "addonPrices": [{"key": "meal_preparation", "unitPriceVnd": 50000}]
+}
+```
+
+Chỉ gửi addonPrices nếu key đã được tạo. Snapshot đã gửi/được chấp nhận vẫn giữ giá tại thời điểm đó; khách xem giá hiện hành từ offer và snapshot cấu trúc đã duyệt. Giá override từng slot, giữ chỗ, sức chứa, mức dùng từng tài nguyên và tính tiền một booking chưa được triển khai ở module này. Hộ bị thu hồi duyệt hoặc dịch vụ RETIRED vẫn đọc lịch sử, nhưng chỉ được tắt offer (isActive=false, không đổi giá/addon); không được mở lại. Root RETIRED không trở lại AVAILABLE. Hộ archived không ghi thay đổi.
+
+Admin chỉ duyệt đúng latest revision/version; snapshot cấu trúc phải còn khớp các offer gốc và tham chiếu phải còn hợp lệ. Chấp thuận cập nhật pointer/category/place/default duration, audit và thông báo cùng transaction; từ chối giữ bản công khai cũ. Duyệt không tự bật lại offer, thay quyền user hoặc sửa bất kỳ slot/booking/item nào. Request review lặp cùng quyết định/lý do/người duyệt trên bản còn mới nhất là no-op. Audit lỗi thì rollback cả giá; thông báo lỗi thì rollback cả review/publication.
+
+Public lọc theo householdId/categoryId/placeId, pricingType, participationMode, q (tên/mô tả đã công khai, wildcard được escape). Bộ lọc mode và pricing phải khớp **cùng một offer**. Hộ/điểm/dịch vụ phải đang hiển thị/cung cấp, chưa archived; hộ APPROVED, chủ hộ ACTIVE/HOUSEHOLD, category SERVICE đang active và cả ba pointer nội dung HOUSEHOLD/PLACE/SERVICE phải trỏ bản APPROVED đúng gốc. Chỉ lấy offer active có trong `offers_snapshot` của bản công khai và đúng cấu trúc; dịch vụ không còn offer phù hợp bị ẩn/404. Khách không nhận draft, review note, tác giả/email hoặc các token nội bộ. Các danh sách quản lý tải bản hồ sơ và offer theo lô.
+
+Snapshot dùng JSON vì thuộc tính cấu hình cần giữ nguyên theo phiên bản; ID quan hệ nghiệp vụ chính vẫn ở các cột/FK có sẵn. Kiểm tra ID offer trong snapshot và truy vấn public dùng [MySQL 8.4 JSON_CONTAINS](https://dev.mysql.com/doc/refman/8.4/en/json-search-functions.html); quyền vẫn được kiểm trên đối tượng/hộ thực tế theo [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
 
 ## Phản hồi và request ID
 

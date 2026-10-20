@@ -23,7 +23,7 @@ const publicWhere = `p.archived_at IS NULL AND p.visibility='VISIBLE' AND p.supp
   AND u.status='ACTIVE' AND u.disabled_at IS NULL AND u.role='HOUSEHOLD'`;
 const publicColumns = 'p.id,p.code,p.household_id,hr.title household_name,cr.id revision_id,cr.version,cr.title,cr.body,cr.details,cr.reviewed_at';
 
-function queries(connection) {
+export function createCatalogQueries(connection) {
   return {
     ...createAuthQueries(connection),
     ownedHousehold: ownerId => first(connection, 'SELECT id,owner_user_id,approval_status,visibility,archived_at FROM households WHERE owner_user_id=?', [ownerId]),
@@ -135,7 +135,7 @@ function queries(connection) {
 
 export function createCatalogRepository(database) {
   return {
-    read: work => database.withConnection(connection => work(queries(connection))),
-    transaction: work => database.transaction(connection => work(queries(connection))),
+    read: work => database.withConnection(connection => work(createCatalogQueries(connection))),
+    transaction: work => database.transaction(connection => work(createCatalogQueries(connection))),
   };
 }

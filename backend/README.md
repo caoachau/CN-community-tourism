@@ -28,6 +28,8 @@ Household onboarding is mounted under `/api/v1/households`: open a draft, save v
 
 The catalog module adds global ADMIN-managed SERVICE/PRODUCT/CONTENT categories under `/api/v1/admin/categories`, owned places under `/api/v1/households/me/places`, and versioned place reviews under `/api/v1/admin/place-submissions`. Guest reads use `/api/v1/public/categories` and `/api/v1/public/places`; they expose only active taxonomy and approved published locations belonging to visible approved households with active owners. Draft/review/account data stays private. Place/category state changes preserve history and have optimistic concurrency checks. No additional migration or seed is needed; see [API.md](API.md) for payloads and publication rules.
 
+Services/experiences and selling offers use `/api/v1/households/me/services`, `/api/v1/admin/service-submissions`, and `/api/v1/public/services`. A submitted service revision snapshots its content, category/location/default duration and offer structures. New or changed selling structures require review; live base/addon prices and sale flags can change without rewriting historical commitments. Input distinguishes person/group/trip/package/hour/unit pricing and requires explicit resource-free addons. Public reads gate all related publication states and expose only approved active offers. The module uses schema 003 with no new migration; calendar/resource availability and booking APIs are separate work.
+
 ## Render
 
 See [RENDER.md](RENDER.md) and the root [render.yaml](../render.yaml). With `rootDir: backend`, Build Command is `npm ci --omit=dev --no-audit --no-fund` and Start Command is `npm start`.

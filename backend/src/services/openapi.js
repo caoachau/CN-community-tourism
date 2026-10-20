@@ -1,0 +1,90 @@
+export function servicesOpenApi({reference,jsonResponse,successSchema}){
+  const text=maxLength=>({type:'string',minLength:1,maxLength});
+  const id={type:'string',minLength:1,maxLength:20,pattern:'^[1-9][0-9]*$'};
+  const date={type:'string',format:'date-time'},token={type:'string',pattern:'^[a-f0-9]{64}$'},version={type:'integer',minimum:1,maximum:4294967295};
+  const pricingType={type:'string',enum:['PER_PERSON','PER_GROUP','PER_TRIP','FIXED_PACKAGE','PER_HOUR','PER_UNIT']};
+  const mode={type:'string',enum:['SHARED','EXCLUSIVE']},positive={type:'integer',minimum:1,maximum:100000};
+  const strings=max=>({type:'array',maxItems:max,items:text(1000)});
+  const terms={type:'object',additionalProperties:false,properties:{scopeDescription:{type:'string',maxLength:2000,default:''},includedItems:{type:'array',maxItems:32,items:text(500)},excludedItems:{type:'array',maxItems:32,items:text(500)}}};
+  const addon={type:'object',additionalProperties:false,required:['key','name','unitPriceVnd','maxQuantity','isActive','resourceFree'],properties:{
+    key:{type:'string',pattern:'^[A-Za-z0-9_-]{1,64}$'},name:text(150),unitPriceVnd:reference('VndAmount'),maxQuantity:positive,isActive:{type:'boolean'},resourceFree:{type:'boolean',enum:[true]},
+  }};
+  const offerProperties={name:text(150),participationMode:mode,pricingType,unitPriceVnd:reference('VndAmount'),unitLabel:text(60),minParticipants:positive,maxParticipants:positive,
+    maxUnits:{...positive,nullable:true},participantsPerUnit:{...positive,nullable:true},terms,addons:{type:'array',maxItems:32,items:addon},isActive:{type:'boolean',default:true}};
+  const config={type:'object',additionalProperties:false,required:Object.keys(offerProperties),properties:{...offerProperties,terms:{...terms,required:Object.keys(terms.properties)}}};
+  const quantityRule={type:'string',enum:['PARTICIPANT_COUNT','ONE','SLOT_DURATION_HOURS','SELECTED_UNITS']};
+  const snapshot={...config,required:['id',...config.required,'structureToken'],properties:{id:reference('DatabaseId'),...config.properties,structureToken:token}};
+  const privateOffer={...snapshot,required:[...snapshot.required,'token','quantityRule','createdAt'],properties:{...snapshot.properties,token,quantityRule,createdAt:date}};
+  const publicOffer={...config,required:['id',...config.required,'quantityRule'],properties:{id:reference('DatabaseId'),...config.properties,quantityRule}};
+  const details={type:'object',additionalProperties:false,required:['participationConditions','preparationNotes'],properties:{participationConditions:strings(20),preparationNotes:strings(20)}};
+  const inputDetails={type:'object',additionalProperties:false,properties:details.properties};
+  const profileProperties={title:text(200),body:{type:'string',maxLength:20000},categoryId:reference('DatabaseId'),defaultPlaceId:{...id,nullable:true},defaultDurationMinutes:{type:'integer',minimum:1,maximum:10080},details};
+  const profile={type:'object',additionalProperties:false,required:['revisionId','version',...Object.keys(profileProperties),'offerSnapshots','schemaVersion','status','submittedAt','reviewedBy','reviewedAt','reviewNote','createdAt'],properties:{
+    revisionId:reference('DatabaseId'),version,...profileProperties,offerSnapshots:{type:'array',maxItems:32,items:snapshot},schemaVersion:{type:'integer',minimum:1},status:{type:'string',enum:['DRAFT','PENDING','APPROVED','REJECTED']},
+    submittedAt:{...date,nullable:true},reviewedBy:{...id,nullable:true},reviewedAt:{...date,nullable:true},reviewNote:{...text(2000),nullable:true},createdAt:date,
+  }};
+  const stateProperties={supplyStatus:{type:'string',enum:['AVAILABLE','PAUSED','RETIRED']},visibility:{type:'string',enum:['VISIBLE','HIDDEN']}};
+  const state={type:'object',additionalProperties:false,required:Object.keys(stateProperties),properties:stateProperties};
+  const rootProperties={id:reference('DatabaseId'),householdId:reference('DatabaseId'),code:text(40),categoryId:reference('DatabaseId'),defaultPlaceId:{...id,nullable:true},defaultDurationMinutes:{type:'integer',minimum:1},...stateProperties,
+    publishedRevisionId:{...id,nullable:true},archivedAt:{...date,nullable:true},createdAt:date};
+  const view={type:'object',additionalProperties:false,required:['service','profile','publishedProfile','offers','offersToken'],properties:{
+    service:{type:'object',additionalProperties:false,required:Object.keys(rootProperties),properties:rootProperties},profile:{...profile,nullable:true},publishedProfile:{...profile,nullable:true},offers:{type:'array',items:privateOffer},offersToken:token,
+  }};
+  const locationDetails={type:'object',additionalProperties:false,properties:{address:text(500),locality:text(200),directions:text(4000),contactPhone:text(32),coordinates:{type:'object',additionalProperties:false,required:['latitude','longitude'],properties:{latitude:{type:'number',minimum:-90,maximum:90},longitude:{type:'number',minimum:-180,maximum:180}}}}};
+  const publicService={type:'object',additionalProperties:false,required:['id','code','householdId','householdName','revisionId','version','title','body','details','defaultDurationMinutes','category','place','offers','publishedAt'],properties:{
+    id:reference('DatabaseId'),code:text(40),householdId:reference('DatabaseId'),householdName:text(200),revisionId:reference('DatabaseId'),version,title:text(200),body:{type:'string',maxLength:20000},details,defaultDurationMinutes:{type:'integer',minimum:1,maximum:10080},
+    category:{type:'object',additionalProperties:false,required:['id','code','name'],properties:{id:reference('DatabaseId'),code:text(50),name:text(150)}},
+    place:{type:'object',additionalProperties:false,required:['id','code','title','details'],properties:{id:reference('DatabaseId'),code:text(40),title:text(200),details:locationDetails}},
+    offers:{type:'array',minItems:1,maxItems:32,items:publicOffer},publishedAt:date,
+  }};
+  const page=items=>({type:'object',additionalProperties:false,required:['items','total','page','pageSize'],properties:{items:{type:'array',items},total:{type:'integer',minimum:0},page:{type:'integer',minimum:1,maximum:100000},pageSize:{type:'integer',minimum:1,maximum:100}}});
+  const paging=[{name:'page',in:'query',schema:{type:'integer',minimum:1,maximum:100000,default:1}},{name:'pageSize',in:'query',schema:{type:'integer',minimum:1,maximum:100,default:20}}];
+  const param=name=>({name,in:'path',required:true,schema:reference('DatabaseId')});
+  const operation=(operationId,summary,responseName,{body,status=200,publicRoute=false,admin=false,parameters=[],description}={})=>({
+    operationId,summary,tags:[publicRoute?'Public catalog':admin?'Administration':'Services'],security:publicRoute?[]:[{BearerAuth:[]}],parameters,...(description?{description}:{}),
+    ...(body?{requestBody:{required:true,content:{'application/json':{schema:reference(body)}}}}:{}),responses:{[status]:jsonResponse('Success; Cache-Control: no-store',reference(responseName)),
+      ...Object.fromEntries([400,401,403,404,409,415,422].map(code=>[code,{$ref:'#/components/responses/ApiError'}])),default:{$ref:'#/components/responses/ApiError'}},
+  });
+  const own='/api/v1/households/me/services',review='/api/v1/admin/service-submissions';
+  return {
+    paths:{
+      [own]:{
+        get:operation('getOwnedServices','Danh sách dịch vụ của hộ','OwnedServiceListResponse',{parameters:paging}),
+        post:operation('createService','Tạo dịch vụ và nội dung nháp','OwnedServiceResponse',{body:'ServiceDraftRequest',status:201,description:'Approved household required. SERVICE category must be active; optional draft place must belong to this household. IDs/code/state are server-owned. No calendar, capacity or booking is created.'}),
+      },
+      [`${own}/{serviceId}`]:{get:operation('getOwnedService','Chi tiết dịch vụ, phiên bản và phương thức bán','OwnedServiceResponse',{parameters:[param('serviceId')]})},
+      [`${own}/{serviceId}/profile`]:{put:operation('saveServiceProfile','Lưu phiên bản nội dung dịch vụ mới','OwnedServiceResponse',{body:'ServiceSaveRequest',parameters:[param('serviceId')],description:'Exact latest revisionId/version required. Category, place and default duration stay in the draft snapshot until approval; existing published metadata stays intact. A pending revision cannot be edited.'})},
+      [`${own}/{serviceId}/submissions`]:{post:operation('submitService','Gửi nội dung và phương thức bán để duyệt','ServiceChangeResponse',{body:'ServiceSubmitRequest',parameters:[param('serviceId')],description:'Requires latest revision/version/offersToken, title >=3, body >=20, an active SERVICE category, an approved visible AVAILABLE owned place and 1–32 complete active offers. Each offer scopeDescription must have >=10 characters. Snapshots freeze all selected offer structures and capture prices for audit. Pending retry is a no-op; an offer change before submission makes offersToken stale.'})},
+      [`${own}/{serviceId}/revisions`]:{get:operation('getServiceRevisions','Lịch sử phiên bản và phương thức bán đã gửi','ServiceRevisionListResponse',{parameters:[param('serviceId'),...paging]})},
+      [`${own}/{serviceId}/status`]:{patch:operation('setServiceStatus','Đổi tình trạng cung cấp/hiển thị dịch vụ','ServiceChangeResponse',{body:'ServiceStatusRequest',parameters:[param('serviceId')],description:'Reason and exact expectedState required. RETIRED cannot be reopened. Revoked households may only set non-AVAILABLE and HIDDEN. Never cancels existing bookings or edits their snapshots.'})},
+      [`${own}/{serviceId}/offers`]:{post:operation('createServiceOffer','Tạo phương thức bán dịch vụ','OfferResponse',{body:'ServiceOfferRequest',status:201,parameters:[param('serviceId')],description:'At most 32 active offers per service. No structural creation while the service revision is pending. A new offer on an already published service remains private until included in an approved new revision. See input rules for participantCount versus billed quantity; there is no availability/price-quote endpoint here.'})},
+      [`${own}/{serviceId}/offers/{offerId}`]:{
+        get:operation('getServiceOffer','Xem phương thức bán của đúng dịch vụ/hộ','OfferResponse',{parameters:[param('serviceId'),param('offerId')]}),
+        put:operation('updateServiceOffer','Sửa cấu hình chưa được sử dụng','OfferChangeResponse',{body:'ServiceOfferUpdateRequest',parameters:[param('serviceId'),param('offerId')],description:'expectedToken prevents lost updates. Structural changes are forbidden after submission or slot/booking references; create a replacement. Structural fields include name/mode/pricing type/unit, participant/unit limits, terms and addon identities/limits. Price/active changes remain allowed without changing these fields.'}),
+      },
+      [`${own}/{serviceId}/offers/{offerId}/pricing`]:{patch:operation('updateServiceOfferPrices','Đổi giá và bật/tắt phương thức/phụ phí','OfferChangeResponse',{body:'ServiceOfferPriceRequest',parameters:[param('serviceId'),param('offerId')],description:'Changes base price/isActive and existing addon prices/flags only. Reasons and current expectedToken required. Works during pending review and after publication, preserves revision/booking/proposal snapshots. Revoked or retired providers may only disable an offer without price/addon changes. Availability must still be checked by the future slot/booking engine.'})},
+      [review]:{get:operation('getServiceSubmissions','ADMIN: hàng đợi nội dung dịch vụ','ServiceSubmissionListResponse',{admin:true,parameters:[...paging,{name:'status',in:'query',schema:{type:'string',enum:['PENDING','APPROVED','REJECTED'],default:'PENDING'}},{name:'householdId',in:'query',schema:reference('DatabaseId')}]})},
+      [`${review}/{revisionId}`]:{get:operation('getServiceSubmission','ADMIN: xem đúng phiên bản và snapshot đã gửi','OwnedServiceResponse',{admin:true,parameters:[param('revisionId')],description:'profile.offerSnapshots is the submitted data; offers is current live configuration. Drafts and non-SERVICE revision IDs return 404.'})},
+      [`${review}/{revisionId}/review`]:{post:operation('reviewService','ADMIN: duyệt hoặc từ chối nội dung dịch vụ','ServiceChangeResponse',{admin:true,body:'ServiceReviewRequest',parameters:[param('revisionId')],description:'Exact pending latest revision/version; rejection requires reason. Approval atomically updates publication/category/place/default-duration, audit and owner notification. Active HOUSEHOLD/approved household and available approved place/category required. Does not enable paused offers or overwrite any booking/slot snapshot. Identical same-admin decision/reason retry is a no-op.'})},
+      '/api/v1/public/services':{get:operation('getPublicServices','Khách tìm dịch vụ và phương thức bán đã công khai','PublicServiceListResponse',{publicRoute:true,parameters:[...paging,...['householdId','categoryId','placeId'].map(name=>({name,in:'query',schema:reference('DatabaseId')})),{name:'q',in:'query',schema:text(100)},{name:'pricingType',in:'query',schema:pricingType},{name:'participationMode',in:'query',schema:mode}],description:'Only approved published service/household/place content, active category/owner, visible AVAILABLE roots and active offers included in the approved snapshot. Mode/pricing filters match the same offer. q searches published title/body with literal wildcard escaping. Does not assert remaining capacity or open slots.'})},
+      '/api/v1/public/services/{serviceId}':{get:operation('getPublicService','Khách xem chi tiết dịch vụ công khai','PublicServiceResponse',{publicRoute:true,parameters:[param('serviceId')],description:'Same gating as list. No draft/review/account/token fields. Missing, hidden, paused, retired, revoked, blocked or services without active approved offers return 404. Public prices are current live rates; committed historical prices stay unchanged.'})},
+    },
+    schemas:{
+      ServiceReviewRequest:reference('PlaceReviewRequest'),
+      ServiceDraftRequest:{type:'object',additionalProperties:false,required:['title','categoryId','defaultDurationMinutes'],properties:{...profileProperties,details:inputDetails},example:{title:'Trải nghiệm bắt cá',body:'Cùng gia đình giăng lưới và tìm hiểu nghề đánh bắt truyền thống.',categoryId:'1',defaultPlaceId:'1',defaultDurationMinutes:180,details:{participationConditions:['Trẻ em đi cùng người lớn'],preparationNotes:['Mang quần áo thay']}}},
+      ServiceSaveRequest:{type:'object',additionalProperties:false,required:['revisionId','version','title','categoryId','defaultDurationMinutes'],properties:{revisionId:reference('DatabaseId'),version,...profileProperties,details:inputDetails}},
+      ServiceSubmitRequest:{type:'object',additionalProperties:false,required:['revisionId','version','offersToken'],properties:{revisionId:reference('DatabaseId'),version,offersToken:token}},
+      ServiceStatusRequest:{...state,required:[...state.required,'expectedState','reason'],properties:{...stateProperties,expectedState:state,reason:text(2000)}},
+      ServiceOfferRequest:{type:'object',additionalProperties:false,required:['name','participationMode','pricingType','unitPriceVnd','minParticipants','maxParticipants'],properties:offerProperties,
+        description:'minParticipants <= maxParticipants. PER_UNIT requires unitLabel/maxUnits/participantsPerUnit and maxParticipants <= maxUnits*participantsPerUnit. Other pricing types require both unit limits null; unitLabel is omitted or the fixed label người/nhóm/chuyến/gói/giờ. PER_PERSON bills participantCount; GROUP/TRIP/PACKAGE bill one; HOUR derives quantity from slot duration; UNIT bills selected units for the whole slot. These are not resource reservations. Addon keys must be unique and each addon explicitly resourceFree=true; finite equipment must go through resource availability.'},
+      ServiceOfferUpdateRequest:{type:'object',additionalProperties:false,required:['expectedToken','reason','configuration'],properties:{expectedToken:token,reason:text(2000),configuration:reference('ServiceOfferRequest')}},
+      ServiceOfferPriceRequest:{type:'object',additionalProperties:false,required:['expectedToken','reason'],properties:{expectedToken:token,reason:text(2000),unitPriceVnd:reference('VndAmount'),isActive:{type:'boolean'},addonPrices:{type:'array',minItems:1,maxItems:32,items:{type:'object',additionalProperties:false,required:['key'],properties:{key:addon.properties.key,unitPriceVnd:reference('VndAmount'),isActive:{type:'boolean'}},anyOf:[{required:['unitPriceVnd']},{required:['isActive']}]}}},anyOf:[{required:['unitPriceVnd']},{required:['isActive']},{required:['addonPrices']}]},
+      OwnedServiceResponse:successSchema(view),ServiceChangeResponse:successSchema({...view,required:[...view.required,'changed'],properties:{...view.properties,changed:{type:'boolean'}}}),
+      OwnedServiceListResponse:successSchema(page(view)),ServiceRevisionListResponse:successSchema(page(profile)),
+      OfferResponse:successSchema({type:'object',additionalProperties:false,required:['offer','offersToken'],properties:{offer:privateOffer,offersToken:token}}),
+      OfferChangeResponse:successSchema({type:'object',additionalProperties:false,required:['offer','offersToken','changed'],properties:{offer:privateOffer,offersToken:token,changed:{type:'boolean'}}}),
+      PublicServiceResponse:successSchema({type:'object',additionalProperties:false,required:['service'],properties:{service:publicService}}),PublicServiceListResponse:successSchema(page(publicService)),
+      ServiceSubmissionListResponse:successSchema(page({type:'object',additionalProperties:false,required:['revisionId','serviceId','householdId','version','title','status','submittedAt','reviewedAt'],properties:{revisionId:reference('DatabaseId'),serviceId:reference('DatabaseId'),householdId:reference('DatabaseId'),version,title:text(200),status:{type:'string',enum:['PENDING','APPROVED','REJECTED']},submittedAt:date,reviewedAt:{...date,nullable:true}}})),
+    },
+  };
+}

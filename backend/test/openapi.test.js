@@ -57,6 +57,13 @@ test('OpenAPI is valid with resolved references and documents implemented system
     '/api/v1/admin/categories','/api/v1/admin/categories/{categoryId}',
     '/api/v1/admin/place-submissions','/api/v1/admin/place-submissions/{revisionId}',
     '/api/v1/admin/place-submissions/{revisionId}/review',
+    '/api/v1/households/me/services','/api/v1/households/me/services/{serviceId}',
+    '/api/v1/households/me/services/{serviceId}/profile','/api/v1/households/me/services/{serviceId}/submissions',
+    '/api/v1/households/me/services/{serviceId}/revisions','/api/v1/households/me/services/{serviceId}/status',
+    '/api/v1/households/me/services/{serviceId}/offers','/api/v1/households/me/services/{serviceId}/offers/{offerId}',
+    '/api/v1/households/me/services/{serviceId}/offers/{offerId}/pricing',
+    '/api/v1/admin/service-submissions','/api/v1/admin/service-submissions/{revisionId}','/api/v1/admin/service-submissions/{revisionId}/review',
+    '/api/v1/public/services','/api/v1/public/services/{serviceId}',
   ].sort());
   assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/admin/users/{userId}/status'].patch.security, [{ BearerAuth: [] }]);

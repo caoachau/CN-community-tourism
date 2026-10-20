@@ -10,6 +10,7 @@ import { createAuthRouter } from './auth/router.js';
 import { createAdminAccountRouter } from './auth/admin-router.js';
 import { createHouseholdRouter, createHouseholdAdminRouter } from './households/router.js';
 import { createPublicCatalogRouter, createOwnedPlaceRouter, createCategoryAdminRouter, createPlaceReviewRouter } from './catalog/router.js';
+import { createOwnedServiceRouter,createServiceReviewRouter,createPublicServiceRouter } from './services/router.js';
 
 export function createApp({
   checkDatabase,
@@ -20,6 +21,7 @@ export function createApp({
   authService,
   householdService,
   catalogService,
+  serviceService,
   trustProxy = 0,
 } = {}) {
   const app = express();
@@ -77,6 +79,13 @@ export function createApp({
       app.use('/api/v1/households/me/places',createOwnedPlaceRouter(catalogService,authService));
       app.use('/api/v1/admin/categories',createCategoryAdminRouter(catalogService,authService));
       app.use('/api/v1/admin/place-submissions',createPlaceReviewRouter(catalogService,authService));
+    }
+  }
+  if(serviceService){
+    app.use('/api/v1/public/services',createPublicServiceRouter(serviceService));
+    if(authService){
+      app.use('/api/v1/households/me/services',createOwnedServiceRouter(serviceService,authService));
+      app.use('/api/v1/admin/service-submissions',createServiceReviewRouter(serviceService,authService));
     }
   }
   if (apiRouter) app.use('/api/v1', apiRouter);
