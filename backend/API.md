@@ -8,7 +8,7 @@ Sau khi cấu hình database/TLS và chạy `npm run dev:backend` từ root:
 - OpenAPI 3.0.3: `http://localhost:5000/api/openapi.json`.
 - Liveness: `GET /api/health`; readiness kiểm tra MySQL/TLS: `GET /api/ready`.
 
-Swagger mô tả health/readiness, xác thực, quản trị tài khoản và luồng mở/xét duyệt hồ sơ hộ dân. OpenAPI được khai báo trong `src/openapi.js`, `src/auth/openapi.js` và `src/households/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài. Các API booking chưa được triển khai.
+Swagger mô tả health/readiness, xác thực, quản trị tài khoản, hồ sơ hộ, danh mục và điểm phục vụ. OpenAPI được khai báo trong `src/openapi.js` và các module `auth`, `households`, `catalog`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài. Các API booking chưa được triển khai.
 
 ## Đăng ký, đăng nhập và phiên JWT
 
@@ -124,6 +124,62 @@ Với hộ APPROVED, lưu/gửi bản sửa giữ nguyên trạng thái APPROVED
 ADMIN phải duyệt đúng phiên bản mới nhất đang PENDING. Gửi lặp cùng quyết định, lý do và ADMIN trên bản còn mới nhất trả `changed=false`; quyết định xung đột hoặc một ADMIN khác trả 409, không ghi trùng event/thông báo. Review response có `user` là **người sở hữu hộ**, không phải ADMIN đang duyệt. Lý do chấp thuận mặc định là “Hồ sơ đáp ứng điều kiện tham gia nền tảng”; lý do từ chối 1–2000 ký tự sau trim.
 
 Các lệnh khóa user theo ID số tăng dần → session của actor → hộ → revision, rồi kiểm lại trạng thái user/role/phiên và quyền sở hữu dưới khóa. Quy tắc này tương thích với khóa tài khoản hiện có. Các thay đổi trạng thái, quyền, audit và thông báo commit/rollback cùng nhau; không upload hoặc gọi dịch vụ ngoài trong transaction. Cách kiểm quyền theo từng request/quan hệ và chỉ nhận trường cho phép dựa trên [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), [OWASP Mass Assignment](https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html); cách khóa hàng tham khảo [MySQL 8.4 Locking Reads](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html).
+
+## Danh mục và điểm phục vụ
+
+Danh mục là dữ liệu chung của nền tảng, do ADMIN quản lý; không có chủ hộ riêng và không cần vòng xét duyệt thứ hai. Có ba loại `SERVICE`, `PRODUCT`, `CONTENT`; không tự gán danh mục này cho điểm phục vụ vì ERD không có quan hệ place/category. Phòng và dịch vụ sẽ tham chiếu `places` ở module tương ứng. Module dùng schema 003 hiện có, không thêm migration, không xóa dữ liệu cũ.
+
+| API | Quyền / chức năng |
+| --- | --- |
+| `GET /api/v1/public/categories` | Khách vãng lai xem danh mục đang hoạt động; lọc `kind`, phân trang. |
+| `GET /api/v1/admin/categories` | ADMIN xem cả danh mục ngừng hoạt động; lọc `kind`, `isActive=true/false`. |
+| `POST /api/v1/admin/categories` | ADMIN tạo với `kind`, `code`, `name`, `isActive`, `reason`. |
+| `GET /api/v1/admin/categories/{categoryId}` | ADMIN xem chi tiết. |
+| `PATCH /api/v1/admin/categories/{categoryId}` | ADMIN đổi `name` và/hoặc `isActive`, kèm `expectedState: {name,isActive}` và `reason`. |
+| `GET /api/v1/public/places` | Khách tìm điểm phục vụ công khai; lọc `householdId`, `locality`, `q`, phân trang. |
+| `GET /api/v1/public/places/{placeId}` | Khách xem chi tiết đã công khai. |
+| `GET /api/v1/households/me/places` | HOUSEHOLD xem danh sách điểm của mình, gồm bản mới nhất và bản công khai. |
+| `POST /api/v1/households/me/places` | Hộ đã được duyệt tạo điểm DRAFT. Backend tự cấp mã và gắn hộ sở hữu. |
+| `GET /api/v1/households/me/places/{placeId}` | HOUSEHOLD xem chi tiết điểm của mình. |
+| `PUT /api/v1/households/me/places/{placeId}/profile` | Lưu bản DRAFT mới, gửi `revisionId`, `version` mới nhất cùng nội dung. |
+| `POST /api/v1/households/me/places/{placeId}/submissions` | Gửi `{revisionId,version}` để Admin duyệt. |
+| `GET /api/v1/households/me/places/{placeId}/revisions` | Xem lịch sử phiên bản và lý do xét duyệt. |
+| `PATCH /api/v1/households/me/places/{placeId}/status` | Đổi `supplyStatus`, `visibility`, kèm `expectedState` tương ứng và `reason`. |
+| `GET /api/v1/admin/place-submissions` | ADMIN xem phiên bản đã gửi, lọc `status=PENDING/APPROVED/REJECTED` và `householdId`. |
+| `GET /api/v1/admin/place-submissions/{revisionId}` | ADMIN xem đúng bản đã gửi, không đọc nháp chưa gửi qua API này. |
+| `POST /api/v1/admin/place-submissions/{revisionId}/review` | ADMIN gửi `{version,decision,reason?}`; `decision=APPROVED/REJECTED`, từ chối bắt buộc lý do. |
+
+Mọi danh sách nhận `page` (mặc định 1, tối đa 100.000) và `pageSize` (mặc định 20, tối đa 100), trả `{items,total,page,pageSize}` trong envelope chung. Các query/body không nhận trường lạ. Không có API xóa cứng.
+
+Code danh mục được trim/chuyển chữ hoa, tối đa 50 ký tự ASCII chữ/số/gạch dưới, bắt đầu bằng chữ. `(kind,code)` duy nhất; trùng trả `CATEGORY_ALREADY_EXISTS` (409). `kind` và `code` không được sửa sau khi tạo để giữ quan hệ tham chiếu. Tắt danh mục không xóa phòng/dịch vụ/sản phẩm/nội dung hoặc lịch sử đang tham chiếu nó. `expectedState` chống hai người ghi đè nhau; lệch trả `STALE_VERSION`. Cập nhật không thay đổi giá trị trả `changed=false`, không tạo audit trùng. Mọi thay đổi có audit trong cùng transaction.
+
+Ví dụ tạo điểm phục vụ:
+
+```json
+{
+  "title": "Vườn trải nghiệm Ba Thành",
+  "body": "Điểm đón khách tham quan vườn và cùng gia đình thu hoạch trái cây.",
+  "details": {
+    "address": "Ấp Bình Hòa, xã An Bình",
+    "locality": "Vĩnh Long",
+    "coordinates": {"latitude": 10.25, "longitude": 105.97},
+    "directions": "Đi theo đường vào cổng vườn, gọi trước khi đến.",
+    "contactPhone": "0901234567"
+  }
+}
+```
+
+Nháp chỉ bắt buộc `title`; gửi duyệt cần title 3–200, body 20–20.000, address 5–500, locality 2–200 ký tự. Thiếu trả `PLACE_PROFILE_INCOMPLETE` (422). Tọa độ tùy chọn hoặc null; khi có phải đủ latitude/longitude dạng số, lần lượt trong [-90,90]/[-180,180]. Hướng dẫn đến tối đa 4.000 ký tự, điện thoại tùy chọn theo cùng định dạng hồ sơ hộ. Đây là metadata địa điểm, chưa có bản đồ nhúng, upload ảnh hoặc lịch tài nguyên. SQL lưu `content_revisions` loại PLACE/schema_version=1; `contactPhone` ánh xạ `details.contact_phone`, địa chỉ/tọa độ/hướng dẫn không sao chép vào bảng gốc.
+
+Chỉ HOUSEHOLD đang sở hữu hộ APPROVED và chưa archived được tạo/lưu/gửi điểm. CUSTOMER đang xin mở hộ chưa có quyền này. ADMIN chỉ dùng route kiểm duyệt; không quản lý điểm thay chủ hộ. Mọi route `/me` lấy hộ từ tài khoản, truy root bằng cả place ID và household ID; không nhận owner/hộ/code/pointer do client khai. ID thiếu và ID thuộc hộ khác đều trả 403 ở route quản lý. Hộ REVOKED vẫn xem được lịch sử; chỉ được đặt trạng thái không AVAILABLE đồng thời HIDDEN, không mở lại/công khai nội dung mới. Các lệnh kiểm lại user/role/phiên và chủ sở hữu trong transaction theo thứ tự khóa thống nhất với auth/hồ sơ hộ.
+
+Lưu tạo revision mới, giữ nguyên bản công khai. Bản PENDING không sửa; bị từ chối phải lưu nháp mới rồi gửi lại. Admin duyệt đúng latest revision/version, từ chối phải có lý do. Chấp thuận còn kiểm chủ hộ ACTIVE/HOUSEHOLD, hộ APPROVED, các root chưa archived, điểm chưa RETIRED. Duyệt cập nhật pointer, audit và thông báo cho chủ hộ trong một transaction; không đổi quyền user hoặc phê duyệt hộ. Từ chối bản sửa giữ nguyên pointer cũ. Gửi lặp bản PENDING hoặc lặp cùng review/lý do/người duyệt trên bản mới nhất trả `changed=false`; quyết định xung đột/sai version trả 409.
+
+Trạng thái cung cấp gồm AVAILABLE, PAUSED, RETIRED; hiển thị VISIBLE/HIDDEN. Thay đổi cần lý do và đúng `expectedState: {supplyStatus,visibility}`. RETIRED không được mở lại, lưu nháp hoặc gửi duyệt tiếp. Admin vẫn có thể từ chối một bản đang chờ của điểm đã nghỉ hẳn. Duyệt nội dung không tự bật lại điểm bị ẩn/tạm ngừng. Những trạng thái này không phải lịch chặn tài nguyên và không tự sửa/hủy booking hay giải phóng tài nguyên đang có nghĩa vụ phục vụ.
+
+Public không cần đăng nhập và luôn `Cache-Control: no-store`. Cả list và detail chỉ lấy đúng `published_revision_id` đã APPROVED của PLACE và HOUSEHOLD; root phải VISIBLE/chưa archived, hộ APPROVED, tài khoản chủ ACTIVE/chưa disabled/vai trò HOUSEHOLD, điểm AVAILABLE. Không đạt một điều kiện thì bị loại khỏi list; detail trả cùng 404 như ID không có. Bản sửa của hộ/điểm đang chờ duyệt không thay nội dung khách đang xem. Response public có nội dung, địa chỉ và điện thoại **đã được duyệt**, không có owner user ID, email tài khoản, metadata tác giả, review note, trạng thái nháp hoặc JSON ngoài danh sách trường công khai; tọa độ cũng chỉ chiếu đúng hai trường số.
+
+`q` (1–100 ký tự) tìm trong tên/địa chỉ của bản công khai, `locality` (1–200) lọc địa phương. Truy vấn tham số hóa và escape `%`, `_`, `!` thành ký tự thường khi tìm, theo [MySQL 8.4 LIKE/ESCAPE](https://dev.mysql.com/doc/refman/8.4/en/string-comparison-functions.html). Danh sách quản lý tải bản mới nhất và bản công khai theo lô; không phát sinh truy vấn riêng cho từng điểm. Chính sách truy dữ liệu theo từng quan hệ và tách response công khai dựa trên [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
 
 ## Phản hồi và request ID
 

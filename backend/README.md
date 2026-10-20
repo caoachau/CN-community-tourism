@@ -26,6 +26,8 @@ Swagger UI is available at `http://localhost:5000/api/docs/`; the OpenAPI docume
 
 Household onboarding is mounted under `/api/v1/households`: open a draft, save versioned profiles, submit and read revision history. ADMIN reviews submitted revisions under `/api/v1/admin/household-applications`. Approval atomically publishes the profile, grants HOUSEHOLD while retaining CUSTOMER rights, writes audit events and an in-app notification. Existing sessions use the live DB role. See [API.md](API.md) and Swagger for request examples, optimistic version checks, rejections and edits of published profiles. This module uses the existing tables and needs no additional migration.
 
+The catalog module adds global ADMIN-managed SERVICE/PRODUCT/CONTENT categories under `/api/v1/admin/categories`, owned places under `/api/v1/households/me/places`, and versioned place reviews under `/api/v1/admin/place-submissions`. Guest reads use `/api/v1/public/categories` and `/api/v1/public/places`; they expose only active taxonomy and approved published locations belonging to visible approved households with active owners. Draft/review/account data stays private. Place/category state changes preserve history and have optimistic concurrency checks. No additional migration or seed is needed; see [API.md](API.md) for payloads and publication rules.
+
 ## Render
 
 See [RENDER.md](RENDER.md) and the root [render.yaml](../render.yaml). With `rootDir: backend`, Build Command is `npm ci --omit=dev --no-audit --no-fund` and Start Command is `npm start`.

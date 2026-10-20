@@ -12,6 +12,8 @@ export const ERROR_DEFINITIONS = Object.freeze(Object.fromEntries(Object.entries
   HOUSEHOLD_NOT_APPROVED: [403, 'Household is not approved to accept new commitments'],
   HOUSEHOLD_ALREADY_EXISTS: [409, 'This account already owns a household profile'],
   HOUSEHOLD_PROFILE_INCOMPLETE: [422, 'Complete the household name, description, address, locality and contact phone before submitting'],
+  CATEGORY_ALREADY_EXISTS: [409, 'A category with this kind and code already exists'],
+  PLACE_PROFILE_INCOMPLETE: [422, 'Complete the place name, description, address and locality before submitting'],
   NOT_FOUND: [404, 'Route or resource not found'],
   INVALID_STATE: [409, 'Action is not allowed in the current state'],
   HOLD_EXPIRED: [409, 'The reservation hold has expired'],

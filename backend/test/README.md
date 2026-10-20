@@ -75,6 +75,8 @@ Migration preflight hiện hỗ trợ DDL khởi tạo trong repository, tên b�
 
 ## Phạm vi kiểm chứng
 
+`catalog.test.js` kiểm tra HTTP và Swagger contract trên schema sau khảo sát cho danh mục toàn nền tảng, ownership điểm phục vụ, nháp/gửi/duyệt/từ chối, giữ snapshot công khai, tìm kiếm/phân trang, escape wildcard, các điều kiện ẩn theo hộ/tài khoản/điểm và chống lộ dữ liệu JSON lồng nhau. Có kiểm thử FK tham chiếu khi ngừng danh mục, tranh chấp sửa/gửi/duyệt, review trùng, rollback audit/thông báo và kiểm lại quyền sau authentication. Chạy cùng suite auth/households để kiểm hồi quy thứ tự khóa chung; không tạo dữ liệu thử trên Aiven.
+
 `households.test.js` dùng schema sau khảo sát (`002` + `003`) và HTTP/API thật trên database test riêng. Kiểm chứng mở hộ DRAFT, gửi duyệt, từ chối/sửa/gửi lại, công khai phiên bản, cấp HOUSEHOLD bằng transaction và giữ quyền CUSTOMER trên JWT cũ; quyền sở hữu và giới hạn ADMIN; snapshot công khai trong khi bản sửa chờ duyệt; stale version; tranh chấp tạo/sửa/gửi/duyệt; thông báo/audit không ghi trùng; rollback sau khi nâng quyền; kiểm lại role/khóa tài khoản/phiên sau authentication. Test contract đối chiếu cả response mới với Swagger/Ajv. Các test này không tạo hộ hoặc tài khoản thử trên Aiven.
 
 Các test schema/transaction và fixture hiện được ghim vào migration `001` để kiểm thử hồi quy thiết kế cũ: 41 bảng/101 FK/140 CHECK; fixture/rollback; FK khác hộ, slot/tài nguyên; chủ và phiên bản nội dung; công thức giá; kết quả từng hạng mục; một proposal SENT; giữ lịch sử tiền/snapshot; dọn schema; khóa hộ bằng hai connection và tranh unique idempotency. `test:db:prepare` vẫn tạo fixture cũ, không đại diện schema 30 bảng đang triển khai trên Aiven.

@@ -1,6 +1,7 @@
 import { ERROR_DEFINITIONS } from './shared/errors.js';
 import { authOpenApi } from './auth/openapi.js';
 import { householdOpenApi } from './households/openapi.js';
+import { catalogOpenApi } from './catalog/openapi.js';
 
 const reference = (name) => ({ $ref: `#/components/schemas/${name}` });
 const requestIdHeader = {
@@ -21,6 +22,7 @@ const successSchema = (data) => ({
 
 const auth = authOpenApi({ reference, jsonResponse, successSchema });
 const households = householdOpenApi({ reference, jsonResponse, successSchema });
+const catalog = catalogOpenApi({ reference, jsonResponse, successSchema });
 
 export const openApiDocument = {
   openapi: '3.0.3',
@@ -37,10 +39,13 @@ export const openApiDocument = {
     { name: 'Authentication', description: 'CUSTOMER signup; CUSTOMER, HOUSEHOLD and ADMIN sessions' },
     { name: 'Administration', description: 'Platform account administration; requires the current ADMIN role' },
     { name: 'Households', description: 'Own household onboarding and versioned profiles; CUSTOMER and HOUSEHOLD' },
+    { name: 'Places', description: 'Household-owned service locations and versioned content' },
+    { name: 'Public catalog', description: 'Active categories and approved, available locations; no account required' },
   ],
   paths: {
     ...auth.paths,
     ...households.paths,
+    ...catalog.paths,
     '/api/health': {
       get: {
         operationId: 'getHealth',
@@ -85,6 +90,7 @@ export const openApiDocument = {
     schemas: {
       ...auth.schemas,
       ...households.schemas,
+      ...catalog.schemas,
       ResponseMeta: {
         type: 'object',
         required: ['requestId'],

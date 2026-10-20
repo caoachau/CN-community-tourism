@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { AppError } from '../shared/errors.js';
 import { publicUser } from '../auth/service.js';
-import { assertCurrentUser, assertRoles, isActiveAccount, isBlockedAccount } from '../auth/policies.js';
+import { assertRoles, isActiveAccount } from '../auth/policies.js';
+import { lockCurrentActor as lockActor } from '../auth/transaction.js';
 import { databaseIdSchema } from '../shared/validation.js';
 import { profileSchema, saveProfileSchema, revisionReferenceSchema, reviewSchema, submissionProfileSchema } from './schemas.js';
 
@@ -47,19 +48,6 @@ export function createHouseholdService({ repository }) {
     if (typeof id !== 'string' || !id || id.length > 100) throw new AppError('INVALID_REQUEST');
     return id;
   };
-  async function lockActor(tx, auth, allowed, additionalIds = []) {
-    assertCurrentUser(auth);
-    const ids = [...new Set([auth.user.id, ...additionalIds])].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1);
-    const users = new Map();
-    for (const id of ids) users.set(id, await tx.findUserById(id, true));
-    const actor = users.get(auth.user.id);
-    if (isBlockedAccount(actor)) throw new AppError('ACCOUNT_BLOCKED');
-    if (!isActiveAccount(actor)) throw new AppError('UNAUTHENTICATED');
-    assertRoles({ user: publicUser(actor), sessionId: auth.sessionId }, allowed);
-    const session = await tx.findSession(auth.sessionId, actor.id, true);
-    if (Number(session?.is_live) !== 1) throw new AppError('UNAUTHENTICATED');
-    return { actor, users };
-  }
   async function ownerContext(tx, auth) {
     const { actor } = await lockActor(tx, auth, ['CUSTOMER']);
     const existing = await tx.householdByOwner(actor.id);

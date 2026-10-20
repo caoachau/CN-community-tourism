@@ -50,10 +50,20 @@ test('OpenAPI is valid with resolved references and documents implemented system
     '/api/v1/households/me/submissions', '/api/v1/households/me/revisions',
     '/api/v1/admin/household-applications', '/api/v1/admin/household-applications/{revisionId}',
     '/api/v1/admin/household-applications/{revisionId}/review',
+    '/api/v1/public/categories','/api/v1/public/places','/api/v1/public/places/{placeId}',
+    '/api/v1/households/me/places','/api/v1/households/me/places/{placeId}',
+    '/api/v1/households/me/places/{placeId}/profile','/api/v1/households/me/places/{placeId}/submissions',
+    '/api/v1/households/me/places/{placeId}/revisions','/api/v1/households/me/places/{placeId}/status',
+    '/api/v1/admin/categories','/api/v1/admin/categories/{categoryId}',
+    '/api/v1/admin/place-submissions','/api/v1/admin/place-submissions/{revisionId}',
+    '/api/v1/admin/place-submissions/{revisionId}/review',
   ].sort());
   assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/admin/users/{userId}/status'].patch.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/auth/register'].post.security, []);
+  assert.deepEqual(document.paths['/api/v1/public/places'].get.security, []);
+  assert.deepEqual(document.paths['/api/v1/public/categories'].get.security, []);
+  assert.deepEqual(document.paths['/api/v1/admin/place-submissions/{revisionId}/review'].post.security,[{ BearerAuth:[] }]);
   assert.deepEqual(document.components.schemas.ErrorCode.enum, Object.keys(ERROR_DEFINITIONS));
   const response = await fetch(`${baseUrl}/api/openapi.json`);
   assert.equal(response.status, 200);

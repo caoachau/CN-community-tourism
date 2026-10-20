@@ -9,6 +9,7 @@ import { requestContext } from './shared/request-context.js';
 import { createAuthRouter } from './auth/router.js';
 import { createAdminAccountRouter } from './auth/admin-router.js';
 import { createHouseholdRouter, createHouseholdAdminRouter } from './households/router.js';
+import { createPublicCatalogRouter, createOwnedPlaceRouter, createCategoryAdminRouter, createPlaceReviewRouter } from './catalog/router.js';
 
 export function createApp({
   checkDatabase,
@@ -18,6 +19,7 @@ export function createApp({
   apiRouter,
   authService,
   householdService,
+  catalogService,
   trustProxy = 0,
 } = {}) {
   const app = express();
@@ -68,6 +70,14 @@ export function createApp({
   if (householdService && authService) {
     app.use('/api/v1/households', createHouseholdRouter(householdService, authService));
     app.use('/api/v1/admin/household-applications', createHouseholdAdminRouter(householdService, authService));
+  }
+  if (catalogService) {
+    app.use('/api/v1/public',createPublicCatalogRouter(catalogService));
+    if (authService) {
+      app.use('/api/v1/households/me/places',createOwnedPlaceRouter(catalogService,authService));
+      app.use('/api/v1/admin/categories',createCategoryAdminRouter(catalogService,authService));
+      app.use('/api/v1/admin/place-submissions',createPlaceReviewRouter(catalogService,authService));
+    }
   }
   if (apiRouter) app.use('/api/v1', apiRouter);
 
