@@ -5,6 +5,8 @@ import { logger } from './shared/logger.js';
 import { authOptions, AuthConfigError } from './config/auth.js';
 import { createAuthRepository } from './auth/repository.js';
 import { createAuthService } from './auth/service.js';
+import { createHouseholdRepository } from './households/repository.js';
+import { createHouseholdService } from './households/service.js';
 
 const port = Number(process.env.PORT ?? '5000');
 let database;
@@ -21,7 +23,8 @@ try {
   const tls = await database.check();
   logger.info({ event: 'database_verified', driver: 'mysql2/promise', ...tls }, 'Database TLS verified');
   const authService = createAuthService({ repository: createAuthRepository(database), options });
-  const app = createApp({ checkDatabase: () => database.check(), logger, authService, trustProxy: options.trustProxy });
+  const householdService = createHouseholdService({ repository: createHouseholdRepository(database) });
+  const app = createApp({ checkDatabase: () => database.check(), logger, authService, householdService, trustProxy: options.trustProxy });
   server = await new Promise((resolve, reject) => {
     const listener = app.listen(port, '0.0.0.0', () => resolve(listener));
     listener.once('error', reject);

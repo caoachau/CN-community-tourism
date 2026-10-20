@@ -8,7 +8,7 @@ Sau khi cấu hình database/TLS và chạy `npm run dev:backend` từ root:
 - OpenAPI 3.0.3: `http://localhost:5000/api/openapi.json`.
 - Liveness: `GET /api/health`; readiness kiểm tra MySQL/TLS: `GET /api/ready`.
 
-Swagger mô tả health/readiness, năm API xác thực dưới `/api/v1/auth` và API ADMIN khóa/mở khóa tài khoản. Booking và luồng mở hộ dân sẽ bổ sung ở module riêng. OpenAPI được khai báo trong `src/openapi.js` và `src/auth/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài.
+Swagger mô tả health/readiness, xác thực, quản trị tài khoản và luồng mở/xét duyệt hồ sơ hộ dân. OpenAPI được khai báo trong `src/openapi.js`, `src/auth/openapi.js` và `src/households/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài. Các API booking chưa được triển khai.
 
 ## Đăng ký, đăng nhập và phiên JWT
 
@@ -20,7 +20,7 @@ Swagger mô tả health/readiness, năm API xác thực dưới `/api/v1/auth` v
 | `GET /api/v1/auth/me` | Header `Authorization: Bearer <accessToken>` | Tài khoản và vai trò hiện tại |
 | `POST /api/v1/auth/logout` | Cùng header Bearer | Thu hồi phiên hiện tại; thiết bị khác giữ phiên riêng |
 
-Đăng ký công khai luôn tạo CUSTOMER, không tạo hộ dân và không nhận trường `role`/`status`. Mở hộ dân và chuyển quyền là bước riêng, không thuộc task xác thực này. Email được trim và chuyển chữ thường; mật khẩu giữ nguyên, dài 15–128 ký tự khi đăng ký, không bắt buộc quy tắc viết hoa/ký tự đặc biệt. Đăng nhập nhận mật khẩu 1–128 ký tự để không chặn tài khoản cũ. Tên hiển thị tối đa 150 ký tự; ID MySQL luôn là chuỗi.
+Đăng ký công khai luôn tạo CUSTOMER, không tạo hộ dân và không nhận trường `role`/`status`. Mở hộ dân và cấp quyền qua luồng xét duyệt riêng bên dưới. Email được trim và chuyển chữ thường; mật khẩu giữ nguyên, dài 15–128 ký tự khi đăng ký, không bắt buộc quy tắc viết hoa/ký tự đặc biệt. Đăng nhập nhận mật khẩu 1–128 ký tự để không chặn tài khoản cũ. Tên hiển thị tối đa 150 ký tự; ID MySQL luôn là chuỗi.
 
 Mật khẩu dùng scrypt với salt ngẫu nhiên riêng, `N=32768, r=8, p=3`, giới hạn hai phép tính đồng thời. Cấu hình này dùng phương án khoảng 32 MiB trong [hướng dẫn lưu mật khẩu OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html). Không lưu hoặc log mật khẩu rõ. Đăng nhập sai mật khẩu, email không tồn tại hoặc tài khoản bị khóa cùng trả `INVALID_CREDENTIALS` (401); đăng ký trùng email trả `EMAIL_ALREADY_EXISTS` (409).
 
@@ -81,6 +81,49 @@ Công cụ xác minh TLS/database trước khi ghi, chỉ tạo tài khoản ADM
 `API_DOCS_ENABLED=true` bật cả UI và OpenAPI JSON; `false` tắt cả hai. Mặc định bật, kể cả cấu hình Render hiện tại. URL server trong OpenAPI là `/`, nên dùng cùng hostname với API, không lấy hostname từ header của khách. OpenAPI JSON trả trực tiếp tài liệu theo chuẩn, không bọc `success/data`; Swagger và tài nguyên tĩnh cũng không dùng envelope nghiệp vụ.
 
 `LOG_LEVEL` nhận `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent`. Mặc định `info`, hoặc `silent` khi `NODE_ENV=test`. `CORS_ORIGIN` là danh sách origin được phép, phân cách bằng dấu phẩy; request không có Origin như Flutter/CLI vẫn được xử lý. CORS không thay thế xác thực và kiểm tra quyền.
+
+## Mở hồ sơ hộ dân và xét duyệt
+
+| API | Quyền | Chức năng |
+| --- | --- | --- |
+| `POST /api/v1/households` | CUSTOMER hoặc HOUSEHOLD | Mở một hộ DRAFT và phiên bản hồ sơ đầu tiên; trả 201. Một tài khoản chỉ sở hữu một hộ; tạo trùng trả 409. |
+| `GET /api/v1/households/me` | Chủ hồ sơ | Xem hộ, phiên bản mới nhất, bản đang công khai và tài khoản hiện hành; chưa mở hộ trả 404. |
+| `PUT /api/v1/households/me/profile` | Chủ hồ sơ | Lưu bản nháp mới, tăng version; phải gửi `revisionId` + `version` mới nhất. |
+| `POST /api/v1/households/me/submissions` | Chủ hồ sơ | Gửi bản nháp đã đủ thông tin, chỉ gửi `revisionId` + `version`. |
+| `GET /api/v1/households/me/revisions?page=1&pageSize=20` | Chủ hồ sơ | Lịch sử phiên bản, người duyệt và lý do từ chối. |
+| `GET /api/v1/admin/household-applications?status=PENDING&page=1&pageSize=20` | ADMIN | Hàng đợi theo trạng thái **phiên bản**, có cả bản sửa của hộ đã duyệt. Hỗ trợ PENDING/APPROVED/REJECTED, không liệt kê nháp. |
+| `GET /api/v1/admin/household-applications/{revisionId}` | ADMIN | Xem đúng bản đã gửi; bản nháp chưa gửi trả 404. |
+| `POST /api/v1/admin/household-applications/{revisionId}/review` | ADMIN | `version`, `decision: APPROVED/REJECTED`, `reason` bắt buộc nếu từ chối. |
+
+Tất cả dùng Bearer và `Cache-Control: no-store`. Route `/me` truy hộ bằng user của phiên hiện hành; không nhận `ownerUserId`, `householdId`, `code`, `role`, trạng thái hoặc pointer công khai từ client. CUSTOMER được chỉnh **hồ sơ đăng ký của chính mình** khi chưa được duyệt, chưa có quyền quản lý phòng/dịch vụ của hộ. ADMIN dùng route xét duyệt, không tự có quyền mở hộ hoặc quản lý thay chủ hộ.
+
+Ví dụ mở hồ sơ (có thể lưu nháp chỉ với `title`):
+
+```json
+{
+  "title": "Hộ du lịch Ba Thành",
+  "body": "Gia đình tổ chức trải nghiệm bắt cá và nấu món địa phương.",
+  "details": {
+    "address": "Ấp Bình Hòa, xã An Bình",
+    "locality": "Vĩnh Long",
+    "contactPhone": "0901234567",
+    "zaloContact": "0901234567",
+    "introductionSections": [{"heading": "Gia đình chúng tôi", "text": "Cùng gìn giữ nghề truyền thống địa phương."}]
+  }
+}
+```
+
+Gửi duyệt cần tên tối thiểu 3 ký tự, mô tả 20 ký tự, địa chỉ 5 ký tự, địa phương 2 ký tự và điện thoại hợp lệ 8–32 ký tự; thiếu trả `HOUSEHOLD_PROFILE_INCOMPLETE` (422). Tên tối đa 200, mô tả 20.000 ký tự, địa chỉ 500, địa phương 200; tối đa 20 phần giới thiệu. Schema lồng nhau là danh sách trường cho phép, không nhận giá/sức chứa/quyền trong `details`. SQL dùng `content_revisions` loại HOUSEHOLD/schema_version=1, ánh xạ camelCase sang `contact_phone`, `zalo_contact`, `introduction_sections`; không cần migration mới. Nội dung là văn bản; client hiển thị bằng text/escape thay vì thực thi HTML. Upload ảnh và quản lý nội dung phòng/dịch vụ thuộc module nội dung tiếp theo.
+
+Mỗi lần lưu tạo revision DRAFT mới và giữ bản cũ để đối chiếu; `revisionId` và `version` chống ghi đè khi hai thiết bị cùng sửa. Bản PENDING không được sửa. Gửi lặp đúng bản PENDING trả `changed=false`. Bản đã bị từ chối phải được lưu thành nháp mới trước khi gửi lại. Sai ID/version trả `STALE_VERSION` (409).
+
+Luồng đầu: hộ DRAFT → PENDING → APPROVED/REJECTED. Tài khoản vẫn CUSTOMER trong lúc chờ hoặc bị từ chối. Khi duyệt, transaction đồng thời đặt pointer công khai, cập nhật hộ APPROVED, đổi CUSTOMER thành HOUSEHOLD, ghi audit và thông báo trong ứng dụng. HOUSEHOLD kế thừa CUSTOMER; access JWT cũ dùng ngay quyền hiện hành từ DB, `/auth/me` và refresh trả role mới, không bắt tạo tài khoản hoặc đăng nhập lần hai. Không duyệt hộ của tài khoản BLOCKED/disabled hoặc đã thành ADMIN.
+
+Với hộ APPROVED, lưu/gửi bản sửa giữ nguyên trạng thái APPROVED và bản công khai; từ chối bản sửa cũng giữ nguyên. Duyệt bản sửa mới chuyển pointer sang bản đó. Hộ REVOKED có thể sửa và gửi xin duyệt lại (PENDING), vẫn giữ HOUSEHOLD để xử lý nghĩa vụ cũ; được duyệt lại không tự khôi phục booking, request hoặc phương án đã kết thúc. Hộ archived không được lưu/gửi/duyệt. Chưa có API thu hồi phê duyệt trong module này vì thao tác đó cần engine xử lý cam kết hiện có.
+
+ADMIN phải duyệt đúng phiên bản mới nhất đang PENDING. Gửi lặp cùng quyết định, lý do và ADMIN trên bản còn mới nhất trả `changed=false`; quyết định xung đột hoặc một ADMIN khác trả 409, không ghi trùng event/thông báo. Review response có `user` là **người sở hữu hộ**, không phải ADMIN đang duyệt. Lý do chấp thuận mặc định là “Hồ sơ đáp ứng điều kiện tham gia nền tảng”; lý do từ chối 1–2000 ký tự sau trim.
+
+Các lệnh khóa user theo ID số tăng dần → session của actor → hộ → revision, rồi kiểm lại trạng thái user/role/phiên và quyền sở hữu dưới khóa. Quy tắc này tương thích với khóa tài khoản hiện có. Các thay đổi trạng thái, quyền, audit và thông báo commit/rollback cùng nhau; không upload hoặc gọi dịch vụ ngoài trong transaction. Cách kiểm quyền theo từng request/quan hệ và chỉ nhận trường cho phép dựa trên [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), [OWASP Mass Assignment](https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html); cách khóa hàng tham khảo [MySQL 8.4 Locking Reads](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html).
 
 ## Phản hồi và request ID
 

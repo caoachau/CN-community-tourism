@@ -10,6 +10,8 @@ export const ERROR_DEFINITIONS = Object.freeze(Object.fromEntries(Object.entries
   FORBIDDEN: [403, 'You do not have permission to perform this action'],
   CORS_ORIGIN_DENIED: [403, 'Origin is not allowed'],
   HOUSEHOLD_NOT_APPROVED: [403, 'Household is not approved to accept new commitments'],
+  HOUSEHOLD_ALREADY_EXISTS: [409, 'This account already owns a household profile'],
+  HOUSEHOLD_PROFILE_INCOMPLETE: [422, 'Complete the household name, description, address, locality and contact phone before submitting'],
   NOT_FOUND: [404, 'Route or resource not found'],
   INVALID_STATE: [409, 'Action is not allowed in the current state'],
   HOLD_EXPIRED: [409, 'The reservation hold has expired'],

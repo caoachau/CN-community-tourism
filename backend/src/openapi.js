@@ -1,5 +1,6 @@
 import { ERROR_DEFINITIONS } from './shared/errors.js';
 import { authOpenApi } from './auth/openapi.js';
+import { householdOpenApi } from './households/openapi.js';
 
 const reference = (name) => ({ $ref: `#/components/schemas/${name}` });
 const requestIdHeader = {
@@ -19,14 +20,15 @@ const successSchema = (data) => ({
 });
 
 const auth = authOpenApi({ reference, jsonResponse, successSchema });
+const households = householdOpenApi({ reference, jsonResponse, successSchema });
 
 export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'Community Tourism API',
     version: '0.1.0',
-    description: 'API nền cho nền tảng du lịch cộng đồng: health/readiness và xác thực JWT cho ba vai trò. '
-      + 'Đăng ký công khai tạo CUSTOMER; mở hộ dân là luồng riêng. API nghiệp vụ dùng /api/v1. '
+    description: 'API nền cho nền tảng du lịch cộng đồng: health/readiness, xác thực JWT và mở/xét duyệt hồ sơ hộ dân. '
+      + 'Đăng ký tạo CUSTOMER; Admin duyệt hộ mới cấp HOUSEHOLD, kế thừa quyền CUSTOMER. API nghiệp vụ dùng /api/v1. '
       + 'Các mã lỗi dùng chung không có nghĩa những chức năng tương ứng đã được triển khai.',
   },
   servers: [{ url: '/', description: 'Same origin as the API, including Render' }],
@@ -34,9 +36,11 @@ export const openApiDocument = {
     { name: 'System', description: 'Process and database readiness checks' },
     { name: 'Authentication', description: 'CUSTOMER signup; CUSTOMER, HOUSEHOLD and ADMIN sessions' },
     { name: 'Administration', description: 'Platform account administration; requires the current ADMIN role' },
+    { name: 'Households', description: 'Own household onboarding and versioned profiles; CUSTOMER and HOUSEHOLD' },
   ],
   paths: {
     ...auth.paths,
+    ...households.paths,
     '/api/health': {
       get: {
         operationId: 'getHealth',
@@ -80,6 +84,7 @@ export const openApiDocument = {
     securitySchemes: { BearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
     schemas: {
       ...auth.schemas,
+      ...households.schemas,
       ResponseMeta: {
         type: 'object',
         required: ['requestId'],

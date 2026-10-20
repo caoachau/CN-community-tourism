@@ -46,6 +46,10 @@ test('OpenAPI is valid with resolved references and documents implemented system
     '/api/health', '/api/ready', '/api/v1/auth/register', '/api/v1/auth/login',
     '/api/v1/auth/refresh', '/api/v1/auth/me', '/api/v1/auth/logout',
     '/api/v1/admin/users/{userId}/status',
+    '/api/v1/households', '/api/v1/households/me', '/api/v1/households/me/profile',
+    '/api/v1/households/me/submissions', '/api/v1/households/me/revisions',
+    '/api/v1/admin/household-applications', '/api/v1/admin/household-applications/{revisionId}',
+    '/api/v1/admin/household-applications/{revisionId}/review',
   ].sort());
   assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/admin/users/{userId}/status'].patch.security, [{ BearerAuth: [] }]);

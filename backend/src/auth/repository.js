@@ -5,7 +5,7 @@ const fields = 'id, email, phone, display_name, password_hash, role, status, dis
 const execute = (connection, sql, values = []) => connection.execute({ sql, timeout: 5000 }, values);
 const first = async (connection, sql, values) => (await execute(connection, sql, values))[0][0] ?? null;
 
-function queries(connection) {
+export function createAuthQueries(connection) {
   return {
     findUserByEmail: (email) => first(connection, `SELECT ${fields} FROM users WHERE email = ?`, [email]),
     findUserById: (id, lock = false) => first(connection, `SELECT ${fields} FROM users WHERE id = ?${lock ? ' FOR UPDATE' : ''}`, [id]),
@@ -67,7 +67,7 @@ function queries(connection) {
 
 export function createAuthRepository(database) {
   return {
-    read: (work) => database.withConnection((connection) => work(queries(connection))),
-    transaction: (work) => database.transaction((connection) => work(queries(connection))),
+    read: (work) => database.withConnection((connection) => work(createAuthQueries(connection))),
+    transaction: (work) => database.transaction((connection) => work(createAuthQueries(connection))),
   };
 }

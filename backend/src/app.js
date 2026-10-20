@@ -8,6 +8,7 @@ import { logger as defaultLogger } from './shared/logger.js';
 import { requestContext } from './shared/request-context.js';
 import { createAuthRouter } from './auth/router.js';
 import { createAdminAccountRouter } from './auth/admin-router.js';
+import { createHouseholdRouter, createHouseholdAdminRouter } from './households/router.js';
 
 export function createApp({
   checkDatabase,
@@ -16,6 +17,7 @@ export function createApp({
   docsEnabled = process.env.API_DOCS_ENABLED !== 'false',
   apiRouter,
   authService,
+  householdService,
   trustProxy = 0,
 } = {}) {
   const app = express();
@@ -62,6 +64,10 @@ export function createApp({
   if (authService) {
     app.use('/api/v1/auth', createAuthRouter(authService));
     app.use('/api/v1/admin', createAdminAccountRouter(authService));
+  }
+  if (householdService && authService) {
+    app.use('/api/v1/households', createHouseholdRouter(householdService, authService));
+    app.use('/api/v1/admin/household-applications', createHouseholdAdminRouter(householdService, authService));
   }
   if (apiRouter) app.use('/api/v1', apiRouter);
 
