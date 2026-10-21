@@ -4,7 +4,8 @@ import 'package:tourism_ui/tourism_ui.dart';
 void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.api});
+  final TourismApi? api;
   @override
-  Widget build(BuildContext context) => const TourismApp(initialHost: true);
+  Widget build(BuildContext context) => TourismApp(initialHost: true, api: api);
 }

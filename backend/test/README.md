@@ -92,3 +92,19 @@ Thiết kế hiện tại có thêm 20 nhóm kiểm tra DDL và prototype transa
 Đây là kiểm thử ràng buộc database và cơ sở transaction. Các endpoint booking, kiểm tra sức chứa, lịch trùng, xác nhận phương án, quyền actor, thu hồi phê duyệt và báo cáo vẫn cần kiểm thử qua implementation nghiệp vụ sau này. Việc suite đạt không có nghĩa 12 kịch bản nghiệm thu nghiệp vụ đã hoàn thành.
 
 Workflow [backend-tests.yml](../../.github/workflows/backend-tests.yml) chạy cùng các lệnh trên GitHub Actions với database Docker riêng và không cần secret Aiven. Workflow mới được thêm vào repository; chỉ có kết quả local cho đến khi được push và chạy trên GitHub.
+
+## Kiểm thử giao diện với API thật
+
+Từ repo: `npm run test:db:up`, sau đó `npm run test:e2e --workspace frontend/admin-web`. Cần Chrome đã cài. Playwright tự chạy Vite cổng 5177 và `test/support/ui-server.js` cổng 5005, không đọc `backend/.env`.
+
+Server chỉ hoạt động với `NODE_ENV=test`, dùng MySQL test riêng và schema ngẫu nhiên do harness sở hữu. Dữ liệu và mật khẩu trong test là fixture công khai; không dùng cho tài khoản thật. Teardown xóa đúng schema của lượt chạy. Không chạy migration/seed hoặc thay dữ liệu Aiven.
+
+Kiểm thử Flutter web cần build trước trong `frontend/mobile-app/flutter_khach`:
+
+```powershell
+& 'F:\dev\flutter\bin\flutter.bat' build web --no-pub --no-web-resources-cdn --no-wasm-dry-run --base-href=/mobile/ --dart-define=API_BASE_URL=http://127.0.0.1:5005/api/v1
+New-Item -ItemType Directory -Force ../../../.cache/ui-e2e/mobile | Out-Null
+Copy-Item build/web/* ../../../.cache/ui-e2e/mobile -Recurse -Force
+```
+
+Trên Windows build ra `build/web` rồi copy; shader compiler có thể lỗi với `--output` chứa `../`. Chạy riêng Admin khi chưa build Flutter: `npm run test:e2e --workspace frontend/admin-web -- workflows.spec.js`.

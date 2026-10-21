@@ -9,6 +9,8 @@ import 'household.dart';
 import 'reservation.dart';
 import 'widgets.dart';
 import 'theme.dart';
+import 'live/app.dart';
+import 'live/api.dart';
 
 const screenTitles = [
   'Chào mừng',
@@ -29,19 +31,22 @@ class TourismApp extends StatefulWidget {
     this.initialHost = false,
     this.initialScreen,
     this.store,
+    this.api,
   });
   final bool initialHost;
   final int? initialScreen;
   final TourismStore? store;
+  final TourismApi? api;
   @override
   State<TourismApp> createState() => _TourismAppState();
 }
 
 class _TourismAppState extends State<TourismApp> {
-  late final TourismStore store = widget.store ?? TourismStore();
+  TourismStore? _ownedStore;
+  TourismStore get store => widget.store ?? (_ownedStore ??= TourismStore());
   @override
   void dispose() {
-    if (widget.store == null) store.dispose();
+    _ownedStore?.dispose();
     super.dispose();
   }
 
@@ -71,6 +76,14 @@ class _TourismAppState extends State<TourismApp> {
   );
   @override
   Widget build(BuildContext context) {
+    // The Stitch gallery is an explicit preview. Normal app launches use APIs.
+    const demoMode = bool.fromEnvironment('DEMO_MODE');
+    if (!demoMode && widget.store == null && widget.initialScreen == null) {
+      return ConnectedTourismApp(
+        initialHost: widget.initialHost,
+        api: widget.api,
+      );
+    }
     final requested =
         WidgetsBinding.instance.platformDispatcher.defaultRouteName;
     final initial = widget.initialScreen != null
