@@ -527,6 +527,15 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
                 _push(this.context, ResourceList(api: widget.api, kind: kind));
               },
             ),
+          ListTile(
+            leading: const Icon(Icons.calendar_month_outlined),
+            title: const Text('Lịch và sức chứa'),
+            subtitle: const Text('Khung giờ, tài nguyên và lịch chặn'),
+            onTap: () {
+              Navigator.pop(context);
+              _push(this.context, CalendarPage(api: widget.api));
+            },
+          ),
         ],
       ),
     ),

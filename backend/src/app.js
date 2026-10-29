@@ -13,6 +13,7 @@ import { createPublicCatalogRouter, createOwnedPlaceRouter, createCategoryAdminR
 import { createOwnedServiceRouter,createServiceReviewRouter,createPublicServiceRouter } from './services/router.js';
 import { createOwnedRoomRouter,createRoomReviewRouter,createPublicRoomRouter } from './rooms/router.js';
 import { createContentRouter } from './content/router.js';
+import { createCalendarRouter, createPublicCalendarRouter } from './calendar/router.js';
 
 export function createApp({
   checkDatabase,
@@ -26,6 +27,7 @@ export function createApp({
   serviceService,
   roomService,
   contentService,
+  calendarService,
   trustProxy = 0,
 } = {}) {
   const app = express();
@@ -70,6 +72,10 @@ export function createApp({
     }));
   }
   if (contentService && authService) app.use('/api/v1', createContentRouter(contentService, authService));
+  if (calendarService) {
+    app.use('/api/v1/public',createPublicCalendarRouter(calendarService));
+    if(authService)app.use('/api/v1/households/me/calendar',createCalendarRouter(calendarService,authService));
+  }
   if (authService) {
     app.use('/api/v1/auth', createAuthRouter(authService));
     app.use('/api/v1/admin', createAdminAccountRouter(authService));

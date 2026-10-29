@@ -269,7 +269,7 @@ Giá và trạng thái bán cập nhật độc lập qua `/pricing`, kể cả 
 }
 ```
 
-Chỉ gửi addonPrices nếu key đã được tạo. Snapshot đã gửi/được chấp nhận vẫn giữ giá tại thời điểm đó; khách xem giá hiện hành từ offer và snapshot cấu trúc đã duyệt. Giá override từng slot, giữ chỗ, sức chứa, mức dùng từng tài nguyên và tính tiền một booking chưa được triển khai ở module này. Hộ bị thu hồi duyệt hoặc dịch vụ RETIRED vẫn đọc lịch sử, nhưng chỉ được tắt offer (isActive=false, không đổi giá/addon); không được mở lại. Root RETIRED không trở lại AVAILABLE. Hộ archived không ghi thay đổi.
+Chỉ gửi addonPrices nếu key đã được tạo. Snapshot đã gửi/được chấp nhận vẫn giữ giá tại thời điểm đó; khách xem giá hiện hành từ offer và snapshot cấu trúc đã duyệt. Giá riêng từng slot, sức chứa, mức dùng tài nguyên và khả dụng đã có trong module lịch; xem CALENDAR.md. Giữ chỗ và tính tiền booking chưa thuộc module này. Hộ bị thu hồi duyệt hoặc dịch vụ RETIRED vẫn đọc lịch sử, nhưng chỉ được tắt offer (isActive=false, không đổi giá/addon); không được mở lại. Root RETIRED không trở lại AVAILABLE. Hộ archived không ghi thay đổi.
 
 Admin chỉ duyệt đúng latest revision/version; snapshot cấu trúc phải còn khớp các offer gốc và tham chiếu phải còn hợp lệ. Chấp thuận cập nhật pointer/category/place/default duration, audit và thông báo cùng transaction; từ chối giữ bản công khai cũ. Duyệt không tự bật lại offer, thay quyền user hoặc sửa bất kỳ slot/booking/item nào. Request review lặp cùng quyết định/lý do/người duyệt trên bản còn mới nhất là no-op. Audit lỗi thì rollback cả giá; thông báo lỗi thì rollback cả review/publication.
 
@@ -343,7 +343,7 @@ Khi còn hạng mục phòng chưa giải phóng, chưa kết thúc trong reserv
 
 Public chỉ lấy pointer APPROVED của phòng, hộ và điểm; cả ba phải chưa archive, VISIBLE và đang cho phép cung cấp, chủ hộ ACTIVE/HOUSEHOLD, hộ APPROVED. Không lộ nháp, review note, tài khoản, token hoặc giá chụp trong lịch sử kiểm duyệt. Query hỗ trợ `page`, `pageSize`, `householdId`, `placeId`, `q`, `guests`, `minPriceVnd`, `maxPriceVnd`; `guests` kiểm `maxGuests >= guests`, khoảng giá bao gồm hai đầu. Từ khóa `%`, `_`, `!` được tìm theo ký tự thường, không biến thành wildcard SQL. Kết quả **không xác nhận còn phòng theo ngày**; chưa nhận ngày đến/ngày đi ở endpoint này.
 
-Lỗi riêng: `ROOM_PROFILE_INCOMPLETE` (422), `ROOM_PLACE_NOT_READY` (409), `ROOM_CONFIGURATION_LOCKED` (409). Validation/ownership/trạng thái dùng mã chung. Ghi root/revision, audit và thông báo xét duyệt cùng commit/rollback. Xóa mềm/khôi phục và quản lý ảnh theo phiên bản xem CONTENT.md. Không xóa cứng; lịch phòng, chặn phòng và đặt phòng chưa thuộc module này.
+Lỗi riêng: `ROOM_PROFILE_INCOMPLETE` (422), `ROOM_PLACE_NOT_READY` (409), `ROOM_CONFIGURATION_LOCKED` (409). Validation/ownership/trạng thái dùng mã chung. Ghi root/revision, audit và thông báo xét duyệt cùng commit/rollback. Xóa mềm/khôi phục và quản lý ảnh theo phiên bản xem CONTENT.md. Không xóa cứng. Lịch trống/chặn phòng xem CALENDAR.md; đặt phòng chưa thuộc module này.
 
 ## Phản hồi và request ID
 

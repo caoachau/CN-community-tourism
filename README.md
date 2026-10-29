@@ -34,6 +34,8 @@ The Flutter apps now use the real API by default. See [mobile setup](frontend/mo
 
 Household profiles, rooms and services support reversible archival and revisioned image galleries (upload, cover selection, ordering and removal). See [content management and image storage](backend/CONTENT.md) for API details and persistent local/S3 configuration. Production image uploads require configured persistent storage.
 
+Calendar management supports service time slots, capacities, resource allocations, room/resource blocks and public availability checks, with Swagger contracts and Flutter management screens. See [calendar API and rules](backend/CALENDAR.md).
+
 ## Build and checks
 
 ```powershell

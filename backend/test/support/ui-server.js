@@ -26,6 +26,8 @@ import {createRoomService} from '../../src/rooms/service.js';
 import {createContentRepository} from '../../src/content/repository.js';
 import {createContentService} from '../../src/content/service.js';
 import {createImageStorage} from '../../src/content/storage.js';
+import {createCalendarRepository} from '../../src/calendar/repository.js';
+import {createCalendarService} from '../../src/calendar/service.js';
 import {createLogger} from '../../src/shared/logger.js';
 
 if(process.env.NODE_ENV!=='test')throw new Error('UI acceptance server requires NODE_ENV=test');
@@ -38,10 +40,11 @@ try {
   await authRepository.transaction(tx=>tx.createUser({email:'ui-admin@example.invalid',displayName:'Admin kiểm thử',passwordHash,role:'ADMIN'}));
   const authService=createAuthService({repository:authRepository,options:authOptions({JWT_SECRET:randomBytes(48).toString('base64url')})});
   mediaDirectory=await fs.mkdtemp(path.join(os.tmpdir(),'ctp-ui-media-'));
+  const serviceService=createServiceService({repository:createServiceRepository(access)}),roomService=createRoomService({repository:createRoomRepository(access)});
   const app=createApp({authService,logger:createLogger({env:{LOG_LEVEL:'silent'}}),allowedOrigins:['http://127.0.0.1:5177','http://localhost:5177','http://127.0.0.1:5005'],
     contentService:createContentService({repository:createContentRepository(access),storage:createImageStorage({NODE_ENV:'test',MEDIA_STORAGE_DIR:mediaDirectory})}),
     householdService:createHouseholdService({repository:createHouseholdRepository(access)}),catalogService:createCatalogService({repository:createCatalogRepository(access)}),
-    serviceService:createServiceService({repository:createServiceRepository(access)}),roomService:createRoomService({repository:createRoomRepository(access)})});
+    calendarService:createCalendarService({repository:createCalendarRepository(access),serviceService,roomService}),serviceService,roomService});
   const root=path.resolve(fileURLToPath(new URL('../../../.cache/ui-e2e/mobile/',import.meta.url)));
   const mime={'.html':'text/html','.js':'text/javascript','.json':'application/json','.wasm':'application/wasm','.ttf':'font/ttf','.otf':'font/otf','.png':'image/png','.jpg':'image/jpeg','.css':'text/css'};
   server=createServer(async(req,res)=>{

@@ -13,6 +13,8 @@ import 'common.dart';
 import 'definitions.dart';
 import 'management.dart';
 import 'media.dart';
+import 'calendar.dart';
+import 'public_calendar.dart';
 
 part 'reference_widgets.dart';
 part 'discovery_pages.dart';

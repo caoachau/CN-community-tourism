@@ -74,6 +74,9 @@ test('OpenAPI is valid with resolved references and documents implemented system
       .flatMap(base=>[`${base}/restore`,`${base}/images`,`${base}/images/order`,`${base}/images/{imageId}`]),
     ...['households','rooms','services'].map(kind=>`/api/v1/public/${kind}/{resourceId}/images`),
     '/api/v1/admin/revisions/{revisionId}/images','/api/v1/media/{key}',
+    ...[['slots','slotId'],['resources','resourceId'],['blocks','blockId']].flatMap(([path,key])=>[
+      `/api/v1/households/me/calendar/${path}`,`/api/v1/households/me/calendar/${path}/{${key}}`]),
+    '/api/v1/public/services/{serviceId}/slots','/api/v1/public/rooms/{roomId}/availability',
   ].sort());
   assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/admin/users/{userId}/status'].patch.security, [{ BearerAuth: [] }]);

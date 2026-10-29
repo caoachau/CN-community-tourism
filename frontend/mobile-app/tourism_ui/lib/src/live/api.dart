@@ -45,6 +45,12 @@ const errorMessages = {
       'Thông tin chưa hợp lệ. Kiểm tra các trường được đánh dấu.',
   'RATE_LIMITED': 'Có quá nhiều yêu cầu. Vui lòng thử lại sau.',
   'NOT_FOUND': 'Nội dung không tồn tại hoặc không còn được công khai.',
+  'INVALID_REQUEST':
+      'Thông tin chưa hợp lệ. Kiểm tra lại thời gian và dữ liệu đã nhập.',
+  'SLOT_NOT_READY': 'Khung giờ cần dịch vụ, điểm và phương thức bán đã duyệt, cùng xác nhận sẵn sàng phục vụ.',
+  'AVAILABILITY_CONFLICT': 'Khoảng thời gian này đã hết sức chứa hoặc trùng với lịch chặn/phân bổ khác.',
+  'CALENDAR_COMMITMENT_CONFLICT': 'Thay đổi này ảnh hưởng đến cam kết đặt chỗ hoặc tài nguyên đang được sử dụng.',
+  'RESOURCE_CODE_EXISTS': 'Hộ đã có tài nguyên với mã này.',
   'INVALID_IMAGE': 'Chọn ảnh JPEG, PNG hoặc WebP hợp lệ, tối đa 25 megapixel.',
   'IMAGE_LIMIT': 'Mỗi hồ sơ có tối đa 12 ảnh.',
   'PAYLOAD_TOO_LARGE': 'Ảnh quá lớn. Vui lòng chọn ảnh không quá 8 MB.',

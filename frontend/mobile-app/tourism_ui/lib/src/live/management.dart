@@ -6,6 +6,7 @@ import 'api.dart';
 import 'common.dart';
 import 'definitions.dart';
 import 'media.dart';
+import 'calendar.dart';
 
 class SignInRequired extends StatelessWidget {
   const SignInRequired({super.key, required this.api});
@@ -364,6 +365,18 @@ class _HouseholdHomeState extends State<HouseholdHome> {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
+                  ListTile(
+                    leading: const Icon(Icons.calendar_month_outlined),
+                    title: const Text('Lịch và sức chứa'),
+                    subtitle: const Text('Khung giờ, tài nguyên và lịch chặn'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CalendarPage(api: widget.api),
+                      ),
+                    ),
+                  ),
                   for (final kind in ResourceKind.values)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),

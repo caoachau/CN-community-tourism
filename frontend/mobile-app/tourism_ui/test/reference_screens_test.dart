@@ -80,7 +80,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Đặt ngay'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('chưa có API lịch trống'), findsOneWidget);
+      expect(find.textContaining('Chức năng giữ chỗ và đặt dịch vụ chưa được mở'), findsOneWidget);
       await tester.tap(find.text('Xem bố cục'));
       await tester.pumpAndSettle();
       expect(find.text('Chọn ngày lưu trú'), findsOneWidget);

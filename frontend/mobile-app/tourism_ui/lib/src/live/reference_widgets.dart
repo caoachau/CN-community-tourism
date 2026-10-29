@@ -65,7 +65,7 @@ enum MissingFeature {
   ),
   booking(
     'Đặt chỗ và lịch phục vụ',
-    'Hệ thống chưa có API lịch trống, giữ chỗ và đặt dịch vụ. Bạn có thể xem bố cục chọn ngày; chưa có yêu cầu đặt nào được gửi.',
+    'Bạn có thể xem lịch và sức chứa. Chức năng giữ chỗ và đặt dịch vụ chưa được mở; xem bố cục chọn ngày sẽ chưa gửi yêu cầu đặt.',
   ),
   payment(
     'Thanh toán trực tiếp',

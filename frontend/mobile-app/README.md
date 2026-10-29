@@ -1,5 +1,7 @@
 # Ứng dụng Flutter khách và hộ dân
 
+Quản lý lịch đã có tại **Quản lý hoạt động → Lịch và sức chứa**: khung giờ, giá theo lịch, tài nguyên, sức chứa, lịch chặn và gỡ chặn. Khách có thể kiểm tra lịch trống trên trang chi tiết phòng/dịch vụ. Kết quả chưa giữ chỗ; API và quy tắc được mô tả tại [CALENDAR.md](../../backend/CALENDAR.md).
+
 Hai app dùng chung `tourism_ui`, mặc định kết nối API Express:
 
 Hồ sơ hộ dân và chi tiết phòng/dịch vụ có quản lý ảnh (JPEG/PNG/WebP, tối đa 8 MiB, 12 ảnh), đổi thứ tự/chọn bìa/gỡ ảnh ở bản nháp, cùng xóa mềm và khôi phục. Khách xem ảnh của phiên bản đã duyệt. Xem [cấu hình storage và API](../../backend/CONTENT.md).

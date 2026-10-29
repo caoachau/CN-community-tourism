@@ -170,6 +170,12 @@ class _PublicDetailState extends State<PublicDetail> {
                         ),
                         const SizedBox(height: 18),
                         _Price(item, large: true),
+                        if (widget.kind != PublicKind.place)
+                          PublicCalendarPanel(
+                            api: widget.api,
+                            kind: widget.kind.path,
+                            id: widget.id,
+                          ),
                         const SizedBox(height: 18),
                         Wrap(
                           spacing: 8,
@@ -385,7 +391,7 @@ class _PublicDetailState extends State<PublicDetail> {
                           ),
                         ],
                         const _FeatureNote(
-                          'Đặt chỗ, lịch trống và đánh giá chưa khả dụng. Bạn có thể liên hệ trực tiếp với hộ.',
+                          'Đặt chỗ và đánh giá chưa khả dụng. Bạn có thể xem lịch trống hoặc liên hệ trực tiếp với hộ.',
                           feature: MissingFeature.booking,
                         ),
                         TextButton.icon(
