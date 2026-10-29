@@ -5,6 +5,7 @@ import '../widgets.dart' show Panel, Photo, green, gray;
 import 'api.dart';
 import 'common.dart';
 import 'definitions.dart';
+import 'media.dart';
 
 class SignInRequired extends StatelessWidget {
   const SignInRequired({super.key, required this.api});
@@ -264,8 +265,13 @@ class _HouseholdHomeState extends State<HouseholdHome> {
                   children: [
                     StatusBadge(household['approvalStatus']),
                     StatusBadge(profile['status']),
+                    if (archived) const Chip(label: Text('Đã lưu trữ')),
                   ],
                 ),
+                if (archived)
+                  const Notice(
+                    'Hồ sơ đã lưu trữ. Các nội dung của hộ được ẩn khỏi danh mục công khai. Khôi phục để tiếp tục quản lý.',
+                  ),
                 if (!approved)
                   Notice(
                     household['approvalStatus'] == 'REVOKED'
@@ -276,6 +282,25 @@ class _HouseholdHomeState extends State<HouseholdHome> {
                 if (busy) const LinearProgressIndicator(),
                 const SizedBox(height: 14),
                 ContentSummary(profile: profile, kind: 'HOUSEHOLD'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: busy
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MediaManager(
+                              api: widget.api,
+                              path: '/households/me',
+                              profile: profile,
+                              editable:
+                                  !archived && profile['status'] == 'DRAFT',
+                            ),
+                          ),
+                        ),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Hình ảnh hồ sơ'),
+                ),
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 10,
@@ -323,6 +348,15 @@ class _HouseholdHomeState extends State<HouseholdHome> {
                       ),
                     ],
                   ),
+                const SizedBox(height: 16),
+                ArchiveAction(
+                  api: widget.api,
+                  path: '/households/me',
+                  profile: profile,
+                  archived: archived,
+                  enabled: !busy,
+                  onChanged: () => setState(load),
+                ),
                 if (widget.api.isHousehold) ...[
                   const Divider(height: 36),
                   const Text(
@@ -529,6 +563,11 @@ class _ResourceListState extends State<ResourceList> {
                                       StatusBadge(
                                         object(row['profile'])['status'],
                                       ),
+                                      if (object(
+                                            row[widget.kind.root],
+                                          )['archivedAt'] !=
+                                          null)
+                                        const Chip(label: Text('Đã lưu trữ')),
                                       StatusBadge(
                                         object(
                                           row[widget.kind.root],
@@ -955,6 +994,40 @@ class _ResourceDetailState extends State<ResourceDetail> {
                       if (busy) const LinearProgressIndicator(),
                       const SizedBox(height: 12),
                       ContentSummary(profile: profile, kind: widget.kind.root),
+                      if (widget.kind != ResourceKind.place) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: busy
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => MediaManager(
+                                      api: widget.api,
+                                      path: path,
+                                      profile: profile,
+                                      editable:
+                                          mutable &&
+                                          profile['status'] == 'DRAFT',
+                                    ),
+                                  ),
+                                ),
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Hình ảnh hồ sơ'),
+                        ),
+                        if (root['archivedAt'] != null)
+                          const Notice(
+                            'Hồ sơ đã lưu trữ và không hiển thị công khai.',
+                          ),
+                        ArchiveAction(
+                          api: widget.api,
+                          path: path,
+                          profile: profile,
+                          archived: root['archivedAt'] != null,
+                          enabled: !busy && h['archivedAt'] == null,
+                          onChanged: () => setState(load),
+                        ),
+                      ],
                       if (widget.kind == ResourceKind.room)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16),

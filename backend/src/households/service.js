@@ -99,6 +99,7 @@ export function createHouseholdService({ repository }) {
         const latest = await tx.latestRevision(household.id, true); referenceMatches(latest, profile);
         if (household.approval_status === 'PENDING' || latest.status === 'PENDING' || latest.version === 4294967295) throw new AppError('INVALID_STATE');
         const revision = await tx.createRevision(household.id, latest.version + 1, profile, actor.id);
+        await tx.copyRevisionImages(latest.id, revision.id);
         await tx.recordEvent({ householdId: household.id, actor, action: 'HOUSEHOLD_PROFILE_SAVED', from: latest.status, to: 'DRAFT', correlationId,
           before: { revisionId: String(latest.id), version: latest.version }, after: { revisionId: String(revision.id), version: revision.version } });
         return view(tx, await tx.householdById(household.id), actor, revision);

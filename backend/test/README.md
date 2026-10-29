@@ -1,5 +1,7 @@
 # Harness kiểm thử và MySQL test database
 
+Suite `integration/content.test.js` kiểm chứng quản lý ảnh và xóa mềm/khôi phục bằng HTTP trên schema khảo sát: upload ảnh thật, thứ tự/ảnh bìa/gỡ ảnh, snapshot theo phiên bản, quyền chủ hộ/Admin/khách, giới hạn và upload đồng thời, rollback khi audit lỗi, thu hồi quyền và giữ nguyên dữ liệu đặt phòng. Unit test `content.test.js` kiểm tra giải mã, metadata, giới hạn tài nguyên và storage local. Xem [hướng dẫn chức năng](../CONTENT.md).
+
 Harness dùng Node.js `node:test`, mysql2/promise và MySQL **8.4.11** trong Docker. Unit test chạy độc lập; integration test chạy migration thật và truy vấn trên InnoDB. MySQL local được publish ở loopback `127.0.0.1:3307`.
 
 ## Chạy từ thư mục gốc repository

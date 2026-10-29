@@ -2,6 +2,8 @@
 
 Hai app dùng chung `tourism_ui`, mặc định kết nối API Express:
 
+Hồ sơ hộ dân và chi tiết phòng/dịch vụ có quản lý ảnh (JPEG/PNG/WebP, tối đa 8 MiB, 12 ảnh), đổi thứ tự/chọn bìa/gỡ ảnh ở bản nháp, cùng xóa mềm và khôi phục. Khách xem ảnh của phiên bản đã duyệt. Xem [cấu hình storage và API](../../backend/CONTENT.md).
+
 - `flutter_khach`: mở trang chào mừng, sau đó khám phá công khai.
 - `flutter_ho`: mở không gian hộ dân; vẫn sử dụng chức năng khách bằng cùng tài khoản.
 - `tourism_ui`: HTTP, quản lý phiên, màn hình và tài nguyên thiết kế dùng chung.

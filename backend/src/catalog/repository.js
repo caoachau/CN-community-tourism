@@ -1,5 +1,6 @@
 import { AppError } from '../shared/errors.js';
 import { createAuthQueries } from '../auth/repository.js';
+import { createMediaQueries } from '../content/images.js';
 
 const execute = (c, sql, values = []) => c.execute({ sql, timeout: 10000 }, values);
 const first = async (c, sql, values = []) => (await execute(c, sql, values))[0][0] ?? null;
@@ -26,6 +27,7 @@ const publicColumns = 'p.id,p.code,p.household_id,hr.title household_name,cr.id 
 export function createCatalogQueries(connection) {
   return {
     ...createAuthQueries(connection),
+    ...createMediaQueries(connection),
     ownedHousehold: ownerId => first(connection, 'SELECT id,owner_user_id,approval_status,visibility,archived_at FROM households WHERE owner_user_id=?', [ownerId]),
     household: (id, lock = false) => first(connection, `SELECT id,owner_user_id,approval_status,visibility,archived_at FROM households WHERE id=?${lock ? ' FOR UPDATE' : ''}`, [id]),
     category: (id, lock = false) => first(connection, `SELECT ${categoryFields} FROM categories WHERE id=?${lock ? ' FOR UPDATE' : ''}`, [id]),

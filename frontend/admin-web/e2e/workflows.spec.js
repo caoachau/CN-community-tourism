@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 const base='http://127.0.0.1:5005/api/v1';
 const password='An isolated customer password for UI acceptance';
+const imageBytes=Buffer.from('UklGRjoAAABXRUJQVlA4IC4AAADQAQCdASoEAAQAAUAmJaACdLoB+AADsAD+82mX/mwIGaH0wf+mkeNI8aR8poAA','base64');
 async function call(request,path,{token,method='GET',body}={}){
   const response=await request.fetch(`${base}${path}`,{method,headers:token?{Authorization:`Bearer ${token}`}:{},...(body?{data:body}:{})});
   const payload=await response.json();expect(response.ok(),`${method} ${path}: ${payload.error?.code??response.status()}`).toBeTruthy();return payload.data;
@@ -42,7 +43,8 @@ test('Admin reviews household, place, room and all service pricing types; edits 
   await page.getByRole('button',{name:'Mở điều hướng',exact:true}).click();
   await page.getByRole('navigation',{name:'Điều hướng quản trị'}).getByRole('button',{name:'Danh mục',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Phân loại nội dung'})).toBeVisible();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  const overflow=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('body *')].map(e=>({tag:e.tagName,cls:e.className,right:e.getBoundingClientRect().right,width:e.getBoundingClientRect().width})).filter(e=>e.right>innerWidth+1)}));
+  expect(overflow.scroll,JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.width);
   await page.screenshot({path:'../../.cache/ui-audit/admin-mobile-live.png'});
   expect(errors).toEqual([]);
 });
@@ -52,4 +54,19 @@ test('Admin rejects a submitted version with a reason and cannot enter using a C
   await loginAdmin(page);await page.getByRole('row').filter({hasText:'Hộ cần bổ sung UI'}).getByRole('button',{name:/Xem hồ sơ/}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'Yêu cầu điều chỉnh'}).click();await expect(dialog.getByRole('alert')).toContainText('Thông tin chưa hợp lệ');await dialog.getByLabel('Ghi chú xét duyệt').fill('Bổ sung mô tả điều kiện tiếp đón khách');await dialog.getByRole('button',{name:'Yêu cầu điều chỉnh'}).click();await expect(dialog).not.toBeVisible();
   expect((await call(request,'/households/me',{token})).profile.reviewNote).toBe('Bổ sung mô tả điều kiện tiếp đón khách');await page.getByRole('button',{name:'Đăng xuất',exact:true}).click();await expect(page.getByRole('heading',{name:'Đăng nhập quản trị'})).toBeVisible();
   await page.getByLabel('Email',{exact:false}).fill(account.user.email);await page.getByLabel('Mật khẩu',{exact:false}).first().fill(password);await page.getByRole('button',{name:'Đăng nhập',exact:true}).click();await expect(page.getByRole('alert')).toContainText('yêu cầu quyền ADMIN');await expect(page.getByRole('navigation',{name:'Điều hướng quản trị'})).not.toBeVisible();
+});
+
+test('Admin previews private submitted photographs and approval publishes the same image',async({page,request})=>{
+  const account=await customer(request),token=account.accessToken;
+  const household=await call(request,'/households',{token,method:'POST',body:{title:'Hộ có hình ảnh UI',body:'Gia đình cung cấp các hoạt động trong vườn và lưu trú.',details:{address:'Ấp Bình Hòa, xã An Bình',locality:'Vĩnh Long',contactPhone:'0901234567'}}});
+  const images=await call(request,'/households/me/images',{token});
+  const upload=await request.post(`${base}/households/me/images`,{params:{revisionId:images.revisionId,version:images.version,expectedToken:images.mediaToken},headers:{Authorization:`Bearer ${token}`,'Content-Type':'image/webp'},data:imageBytes});
+  expect(upload.status()).toBe(201);const uploaded=(await upload.json()).data.images[0];
+  expect((await request.get(`${base}${uploaded.url}`)).status()).toBe(404);
+  await call(request,'/households/me/submissions',{token,method:'POST',body:{revisionId:household.profile.revisionId,version:household.profile.version}});
+  await loginAdmin(page);await page.getByRole('row').filter({hasText:'Hộ có hình ảnh UI'}).getByRole('button',{name:/Xem hồ sơ/}).click();
+  const dialog=page.getByRole('dialog'),preview=dialog.getByRole('img',{name:'Ảnh 1, ảnh bìa'});
+  await expect(preview).toBeVisible();await expect.poll(()=>preview.evaluate(image=>image.complete&&image.naturalWidth>0)).toBeTruthy();
+  await dialog.getByRole('button',{name:'Duyệt phiên bản này'}).click();await expect(dialog).not.toBeVisible();
+  expect((await request.get(`${base}${uploaded.url}`)).status()).toBe(200);
 });

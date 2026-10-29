@@ -65,6 +65,7 @@ void main() {
         vault: Vault(),
         client: MockClient((r) async {
           requests.add('${r.method} ${r.url.path}');
+          if (r.url.path.endsWith('/images')) return ok({'images': []});
           return ok({'room': room});
         }),
       );
@@ -84,7 +85,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Chọn ngày lưu trú'), findsOneWidget);
       expect(find.text('Chưa kiểm tra chỗ trống'), findsOneWidget);
-      expect(requests, ['GET /api/v1/public/rooms/31']);
+      expect(requests.first, 'GET /api/v1/public/rooms/31');
+      expect(
+        requests.skip(1),
+        everyElement('GET /api/v1/public/rooms/31/images'),
+      );
       expect(tester.takeException(), isNull);
     },
   );

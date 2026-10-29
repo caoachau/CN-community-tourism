@@ -1,4 +1,5 @@
 import { createAuthQueries } from '../auth/repository.js';
+import { createMediaQueries } from '../content/images.js';
 
 const execute = (connection, sql, values = []) => connection.execute({ sql, timeout: 10000 }, values);
 const first = async (connection, sql, values = []) => (await execute(connection, sql, values))[0][0] ?? null;
@@ -8,6 +9,7 @@ const revisionFields = 'id, household_profile_id, version, title, body, details,
 function queries(connection) {
   return {
     ...createAuthQueries(connection),
+    ...createMediaQueries(connection),
     householdByOwner: (ownerId) => first(connection, `SELECT ${householdFields} FROM households WHERE owner_user_id=?`, [ownerId]),
     householdById: (id, lock = false) => first(connection, `SELECT ${householdFields} FROM households WHERE id=?${lock ? ' FOR UPDATE' : ''}`, [id]),
     async createHousehold(ownerId, code) {

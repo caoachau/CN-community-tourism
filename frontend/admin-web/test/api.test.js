@@ -8,6 +8,20 @@ const ok=data=>new Response(JSON.stringify({success:true,data,meta:{requestId:'t
 const failure=(code,status=401)=>new Response(JSON.stringify({success:false,error:{code,message:'NEVER_EXPOSE_SERVER_DETAILS'},meta:{requestId:'safe-reference'}}),{status});
 const apiWith=handler=>new ApiClient({baseUrl:'http://127.0.0.1/api/v1',fetcher:async(url,options)=>handler(new URL(url),options)});
 
+test('private image downloads refresh expired sessions and return binary blobs',async()=>{
+  let rotations=0;
+  const api=apiWith((url,options)=>{
+    if(url.pathname.endsWith('/auth/login'))return ok(session());
+    if(url.pathname.endsWith('/auth/refresh')){rotations++;return ok(session('next'));}
+    assert.equal(options.headers.Accept,'image/webp');
+    if(options.headers.Authorization==='Bearer access-first')return failure('UNAUTHENTICATED');
+    return new Response(new Uint8Array([82,73,70,70]),{headers:{'Content-Type':'image/webp'}});
+  });
+  await api.login({email:'admin@example.invalid',password:'test-only-password'});
+  const blob=await api.request('GET','/media/00000000-0000-0000-0000-000000000000.webp',{binary:true});
+  assert.equal(blob.type,'image/webp');assert.equal(blob.size,4);assert.equal(rotations,1);
+});
+
 test('normalizes the previous /api environment setting without duplicating v1',()=>{
   assert.equal(normalizeBase('http://localhost:5000/api/'),'http://localhost:5000/api/v1');assert.equal(normalizeBase('/api/v1'),'/api/v1');
 });

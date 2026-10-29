@@ -1,5 +1,7 @@
 # Backend API
 
+Quản lý ảnh theo phiên bản, xóa mềm/khôi phục hồ sơ hộ dân, phòng và dịch vụ: xem [CONTENT.md](CONTENT.md). File `.env.example` có cấu hình ảnh local và S3; production cần storage bền vững.
+
 ## Local setup
 
 From the repository root, copy `backend/.env.example` to `backend/.env`, then run:

@@ -1,5 +1,7 @@
 # Render Free + Aiven MySQL TLS
 
+Ảnh cần storage bền vững: cấu hình `MEDIA_STORAGE_DRIVER=s3` và bucket riêng tư cùng các biến `MEDIA_S3_*` theo [CONTENT.md](CONTENT.md). Không dùng filesystem tạm của Render Free để lưu ảnh người dùng. Backend vẫn khởi động khi storage chưa được cấu hình, nhưng thao tác ảnh sẽ trả `MEDIA_STORAGE_UNAVAILABLE`.
+
 Prepared and checked on 2026-10-10. Driver: `mysql2/promise` 3.24.5. No Prisma dependency or migration/seed execution is part of this deployment.
 
 ## Configuration to review before creating the service

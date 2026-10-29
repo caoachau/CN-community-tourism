@@ -23,7 +23,7 @@ export class ApiClient {
   subscribe=(listener)=>{this.#listeners.add(listener);return()=>this.#listeners.delete(listener);};
   #notify(){for(const listener of this.#listeners)listener();}
   clear(notice=null){this.#epoch++;this.#access=null;this.#refresh=null;this.user=null;this.notice=notice;this.#notify();}
-  async #send(method,path,{body,query,token,signal}={}) {
+  async #send(method,path,{body,query,token,signal,binary=false}={}) {
     const origin=globalThis.location?.origin??'http://localhost';let url;
     try {url=new URL(`${this.baseUrl}${path}`,origin);if(url.username||url.password||!['https:','http:'].includes(url.protocol))throw new Error();}
     catch {throw new ApiError('CONFIGURATION');}
@@ -32,7 +32,8 @@ export class ApiClient {
     const abort=()=>controller.abort();if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
     const timer=setTimeout(()=>{timedOut=true;controller.abort();},25000);
     try {
-      const response=await this.fetcher(url,{method,credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});
+      const response=await this.fetcher(url,{method,credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:binary?'image/webp':'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});
+      if(binary&&response.ok&&response.headers.get('content-type')?.startsWith('image/webp'))return response.blob();
       let payload;try {payload=await response.json();}catch {throw new ApiError('INVALID_RESPONSE');}
       if(!response.ok||payload.success!==true)throw new ApiError(payload.error?.code??'INVALID_RESPONSE',{requestId:payload.meta?.requestId,issues:payload.error?.details??[]});
       return payload.data;

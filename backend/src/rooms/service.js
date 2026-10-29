@@ -83,6 +83,7 @@ export function createRoomService({repository}) {
         const latest=await tx.latestRoom(roomId,true);match(latest,input);
         if(latest.status==='PENDING'||latest.version===4294967295)throw new AppError('INVALID_STATE');
         await validatePlace(tx,household.id,input);const revision=await tx.createRoomRevision(roomId,latest.version+1,input,actor.id);
+        await tx.copyRevisionImages(latest.id,revision.id);
         await tx.event({householdId:household.id,actor,entityType:'ROOM',entityId:roomId,action:'ROOM_PROFILE_SAVED',requestId,before:{revisionId:String(latest.id)},after:{revisionId:String(revision.id),version:revision.version}});
         return view(tx,room,revision);
       });

@@ -98,5 +98,6 @@ temp/
 
 # Local database exports and Workbench cache; keep schema SQL and .mwb models.
 /database-backups/
+/backend/storage/
 *.mwb.bak
 *.mwb.cache

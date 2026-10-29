@@ -199,6 +199,7 @@ Future<String?> askReason(
   BuildContext context,
   String title, {
   String action = 'Xác nhận',
+  String? description,
 }) async {
   final controller = TextEditingController(), form = GlobalKey<FormState>();
   final result = await showDialog<String>(
@@ -207,15 +208,25 @@ Future<String?> askReason(
       title: Text(title),
       content: Form(
         key: form,
-        child: TextFormField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 4,
-          maxLength: 2000,
-          decoration: const InputDecoration(labelText: 'Lý do'),
-          validator: (value) => value == null || value.trim().isEmpty
-              ? 'Vui lòng nhập lý do'
-              : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (description != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(description),
+              ),
+            TextFormField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 4,
+              maxLength: 2000,
+              decoration: const InputDecoration(labelText: 'Lý do'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Vui lòng nhập lý do'
+                  : null,
+            ),
+          ],
         ),
       ),
       actions: [

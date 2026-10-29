@@ -84,7 +84,9 @@ export function createServiceService({repository}){
       id(serviceId);input=parse(serviceSaveSchema,input);correlation(requestId);
       return repository.transaction(async tx=>{const {actor,household,root}=await context(tx,auth,serviceId);editable(household,root);const latest=await tx.latestService(serviceId,true);match(latest,input);
         if(latest.status==='PENDING'||latest.version===4294967295)throw new AppError('INVALID_STATE');await validateReferences(tx,household.id,input);
-        const revision=await tx.createServiceRevision(serviceId,latest.version+1,input,actor.id);await tx.event({householdId:household.id,actor,entityType:'SERVICE',entityId:serviceId,action:'SERVICE_PROFILE_SAVED',requestId,before:{revisionId:String(latest.id)},after:{revisionId:String(revision.id),version:revision.version}});
+        const revision=await tx.createServiceRevision(serviceId,latest.version+1,input,actor.id);
+        await tx.copyRevisionImages(latest.id,revision.id);
+        await tx.event({householdId:household.id,actor,entityType:'SERVICE',entityId:serviceId,action:'SERVICE_PROFILE_SAVED',requestId,before:{revisionId:String(latest.id)},after:{revisionId:String(revision.id),version:revision.version}});
         return view(tx,root,revision);});
     },
     async submit(auth,serviceId,input,requestId){

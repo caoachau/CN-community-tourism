@@ -4,6 +4,7 @@ import { householdOpenApi } from './households/openapi.js';
 import { catalogOpenApi } from './catalog/openapi.js';
 import { servicesOpenApi } from './services/openapi.js';
 import { roomsOpenApi } from './rooms/openapi.js';
+import { contentOpenApi } from './content/openapi.js';
 
 const reference = (name) => ({ $ref: `#/components/schemas/${name}` });
 const requestIdHeader = {
@@ -27,6 +28,11 @@ const households = householdOpenApi({ reference, jsonResponse, successSchema });
 const catalog = catalogOpenApi({ reference, jsonResponse, successSchema });
 const services = servicesOpenApi({ reference, jsonResponse, successSchema });
 const rooms = roomsOpenApi({ reference, jsonResponse, successSchema });
+const content = contentOpenApi({ reference, jsonResponse, successSchema });
+const businessPaths = {};
+for (const module of [auth, households, catalog, services, rooms, content]) {
+  for (const [path, operations] of Object.entries(module.paths)) businessPaths[path] = { ...businessPaths[path], ...operations };
+}
 
 export const openApiDocument = {
   openapi: '3.0.3',
@@ -46,14 +52,11 @@ export const openApiDocument = {
     { name: 'Places', description: 'Household-owned service locations and versioned content' },
     { name: 'Services', description: 'Household services/experiences, moderated versions and selling offers' },
     { name: 'Rooms', description: 'Household lodging, nightly pricing and moderated content versions' },
+    { name: 'Content management', description: 'Versioned images and reversible archival of household profiles, rooms and services' },
     { name: 'Public catalog', description: 'Active categories and approved, available locations; no account required' },
   ],
   paths: {
-    ...auth.paths,
-    ...households.paths,
-    ...catalog.paths,
-    ...services.paths,
-    ...rooms.paths,
+    ...businessPaths,
     '/api/health': {
       get: {
         operationId: 'getHealth',
@@ -101,6 +104,7 @@ export const openApiDocument = {
       ...catalog.schemas,
       ...services.schemas,
       ...rooms.schemas,
+      ...content.schemas,
       ResponseMeta: {
         type: 'object',
         required: ['requestId'],

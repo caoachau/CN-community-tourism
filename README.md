@@ -32,6 +32,8 @@ Expected response includes `success: true` and `data.status: "ok"`. This is a li
 
 The Flutter apps now use the real API by default. See [mobile setup](frontend/mobile-app/README.md) for Android emulator/device URLs, CORS, available functions and the separate Stitch demo mode.
 
+Household profiles, rooms and services support reversible archival and revisioned image galleries (upload, cover selection, ordering and removal). See [content management and image storage](backend/CONTENT.md) for API details and persistent local/S3 configuration. Production image uploads require configured persistent storage.
+
 ## Build and checks
 
 ```powershell

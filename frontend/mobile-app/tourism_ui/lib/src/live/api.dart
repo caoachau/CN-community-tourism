@@ -45,6 +45,11 @@ const errorMessages = {
       'Thông tin chưa hợp lệ. Kiểm tra các trường được đánh dấu.',
   'RATE_LIMITED': 'Có quá nhiều yêu cầu. Vui lòng thử lại sau.',
   'NOT_FOUND': 'Nội dung không tồn tại hoặc không còn được công khai.',
+  'INVALID_IMAGE': 'Chọn ảnh JPEG, PNG hoặc WebP hợp lệ, tối đa 25 megapixel.',
+  'IMAGE_LIMIT': 'Mỗi hồ sơ có tối đa 12 ảnh.',
+  'PAYLOAD_TOO_LARGE': 'Ảnh quá lớn. Vui lòng chọn ảnh không quá 8 MB.',
+  'MEDIA_STORAGE_UNAVAILABLE':
+      'Chưa thể lưu hoặc tải ảnh. Vui lòng thử lại sau.',
 };
 
 class ApiFailure implements Exception {
@@ -158,19 +163,30 @@ class TourismApi extends ChangeNotifier {
     Json? body,
     Map<String, dynamic>? query,
     String? token,
+    Uint8List? bytes,
+    bool binary = false,
   }) async {
     try {
       final request = http.Request(method, _uri(path, query));
-      request.headers['Accept'] = 'application/json';
+      request.headers['Accept'] = binary ? 'image/webp' : 'application/json';
       if (token != null) request.headers['Authorization'] = 'Bearer $token';
       if (body != null) {
         request.headers['Content-Type'] = 'application/json';
         request.body = jsonEncode(body);
       }
+      if (bytes != null) {
+        request.headers['Content-Type'] = 'application/octet-stream';
+        request.bodyBytes = bytes;
+      }
       final response = await _client
           .send(request)
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 25));
+      if (binary &&
+          response.statusCode == 200 &&
+          response.headers['content-type']?.startsWith('image/webp') == true) {
+        return {'bytes': response.bodyBytes};
+      }
       Json payload;
       try {
         payload = object(jsonDecode(utf8.decode(response.bodyBytes)));
@@ -272,6 +288,8 @@ class TourismApi extends ChangeNotifier {
     Json? body,
     Map<String, dynamic>? query,
     bool authenticated = true,
+    Uint8List? bytes,
+    bool binary = false,
   }) async {
     final generation = _epoch, usedToken = _accessToken;
     if (authenticated && _accessToken == null) {
@@ -286,6 +304,8 @@ class TourismApi extends ChangeNotifier {
           body: body,
           query: query,
           token: authenticated ? _accessToken : null,
+          bytes: bytes,
+          binary: binary,
         );
       } on ApiFailure catch (error) {
         if (!authenticated || error.code != 'UNAUTHENTICATED') rethrow;
@@ -297,6 +317,8 @@ class TourismApi extends ChangeNotifier {
           body: body,
           query: query,
           token: _accessToken,
+          bytes: bytes,
+          binary: binary,
         );
       }
       if (authenticated && generation != _epoch) {
@@ -311,6 +333,19 @@ class TourismApi extends ChangeNotifier {
       }
       rethrow;
     }
+  }
+
+  Future<Uint8List> imageBytes(String path, {bool authenticated = true}) async {
+    if (!RegExp(r'^/media/[a-f0-9-]{36}\.webp$').hasMatch(path)) {
+      throw const ApiFailure('INVALID_RESPONSE');
+    }
+    final data = await request(
+      'GET',
+      path,
+      binary: true,
+      authenticated: authenticated,
+    );
+    return data['bytes'] as Uint8List;
   }
 
   Future<void> authenticate(Json input, {bool register = false}) async {

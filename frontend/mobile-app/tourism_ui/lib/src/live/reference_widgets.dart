@@ -481,23 +481,38 @@ String _unit(Json offer) => switch (offer['pricingType']) {
 class _ListingPhoto extends StatelessWidget {
   const _ListingPhoto(
     this.item, {
+    required this.api,
     this.height = 150,
     this.favorite = true,
     this.image,
   });
   final _Listing item;
+  final TourismApi api;
   final String? image;
   final double height;
   final bool favorite;
   @override
   Widget build(BuildContext context) => Stack(
     children: [
-      Photo(
-        image ?? item.image,
-        height: height,
-        width: double.infinity,
-        label: 'Ảnh minh họa du lịch cộng đồng',
-      ),
+      if (item.kind == PublicKind.place)
+        Photo(
+          image ?? item.image,
+          height: height,
+          width: double.infinity,
+          label: 'Ảnh minh họa du lịch cộng đồng',
+        )
+      else
+        PublicCover(
+          api: api,
+          endpoint: '/public/${item.kind.path}/${item.id}/images',
+          height: height,
+          fallback: Photo(
+            image ?? item.image,
+            height: height,
+            width: double.infinity,
+            label: 'Ảnh minh họa du lịch cộng đồng',
+          ),
+        ),
       Positioned(
         left: 8,
         bottom: 8,
@@ -508,7 +523,7 @@ class _ListingPhoto extends StatelessWidget {
             borderRadius: BorderRadius.circular(5),
           ),
           child: const Text(
-            'Ảnh minh họa',
+            'Hình ảnh giới thiệu',
             style: TextStyle(color: Colors.white, fontSize: 8),
           ),
         ),
@@ -584,6 +599,7 @@ class _ListingCard extends StatelessWidget {
         children: [
           _ListingPhoto(
             item,
+            api: api,
             height: compact ? 115 : 178,
             image: compact && item.kind == PublicKind.room ? 'pao' : null,
           ),

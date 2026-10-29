@@ -1,6 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {ArrowClockwise,Check,Plus,ShieldCheck,WarningCircle,X} from '@phosphor-icons/react';
 import {ApiError} from './api.js';
+import {MediaGallery} from './MediaGallery.jsx';
 import {Badge,CopyId,Empty,ErrorNotice,Field,Loading,Modal,Pagination,Profile,date,label,money} from './components.jsx';
 
 export const reviewKinds={
@@ -47,7 +48,7 @@ function ReviewDetail({api,config,selected,onClose,onChanged,onAccount}) {
         {user&&<div><strong>{user.displayName}</strong><p>{user.email}</p><CopyId value={user.id}/><button className="text-button" onClick={()=>{onClose();onAccount(user.id);}}>Quản lý tài khoản</button></div>}
       </div>
       {config.root==='room'&&<div className="notice">Giá hiện hành: <strong>{money(root.nightlyPriceVnd)} / đêm</strong>. Duyệt nội dung không thay đổi giá hiện hành hoặc cam kết cũ.</div>}
-      <div className="comparison"><section><h2 className="column-heading">Đang công khai</h2><Profile profile={state.data.publishedProfile} kind={config.root}/></section><section><h2 className="column-heading">Phiên bản được gửi</h2><Profile profile={state.data.profile} kind={config.root}/></section></div>
+      <div className="comparison"><section><h2 className="column-heading">Đang công khai</h2><Profile profile={state.data.publishedProfile} kind={config.root}/>{config.root!=='place'&&state.data.publishedProfile&&<MediaGallery api={api} revisionId={state.data.publishedProfile.revisionId}/>}</section><section><h2 className="column-heading">Phiên bản được gửi</h2><Profile profile={state.data.profile} kind={config.root}/>{config.root!=='place'&&<MediaGallery api={api} revisionId={state.data.profile.revisionId}/>}</section></div>
       <ErrorNotice error={error}/>
       {state.data.profile.status==='PENDING'?<div className="review-actions"><Field label="Ghi chú xét duyệt" name="reviewReason" as="textarea" rows={3} maxLength={2000} value={reason} onChange={event=>setReason(event.target.value)} disabled={busy} hint="Bắt buộc nêu lý do khi yêu cầu điều chỉnh."/>
         <div className="button-row"><button className="secondary danger" disabled={busy} onClick={()=>review('REJECTED')}><X/>Yêu cầu điều chỉnh</button><button className="primary" disabled={busy} onClick={()=>review('APPROVED')}><Check/>{busy?'Đang xử lý…':'Duyệt phiên bản này'}</button></div></div>

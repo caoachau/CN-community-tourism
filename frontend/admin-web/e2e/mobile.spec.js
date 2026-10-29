@@ -60,9 +60,28 @@ test('Flutter registers a customer, submits a household and room, then shows the
   await fill(page,'Số khách tối đa mỗi phòng','4');await fill(page,'Giá một phòng / một đêm \\(VND\\)','420000');
   response=changed(page,'/households/me/rooms');await page.getByRole('button',{name:'Lưu nháp',exact:true}).click();let r=await saved(response);
   expect(r.room.nightlyPriceVnd).toBe(420000);
+  await page.getByRole('button',{name:'Hình ảnh hồ sơ',exact:true}).click();
+  const imageBytes=Buffer.from('UklGRjoAAABXRUJQVlA4IC4AAADQAQCdASoEAAQAAUAmJaACdLoB+AADsAD+82mX/mwIGaH0wf+mkeNI8aR8poAA','base64');
+  const imagePath=`/households/me/rooms/${r.room.id}/images`;
+  for(let index=1;index<=2;index++){
+    const choosing=page.waitForEvent('filechooser');await page.getByRole('button',{name:'Tải ảnh lên',exact:true}).click();
+    response=changed(page,imagePath);await(await choosing).setFiles({name:`phong-${index}.webp`,mimeType:'image/webp',buffer:imageBytes});
+    expect((await saved(response)).images).toHaveLength(index);
+  }
+  response=changed(page,`${imagePath}/order`,'PUT');await page.getByRole('button',{name:'Đưa ảnh ra sau',exact:true}).first().click();await saved(response);
+  response=changed(page,`${imagePath}/order`,'PUT');await page.getByRole('button',{name:'Đặt làm ảnh bìa',exact:true}).first().click();const covered=await saved(response);expect(covered.images[0].isCover).toBe(true);
+  await page.getByRole('button',{name:'Gỡ ảnh',exact:true}).last().click();
+  response=changed(page,`${imagePath}/${covered.images[1].id}`,'DELETE');await page.getByRole('button',{name:'Gỡ ảnh',exact:true}).last().click();expect((await saved(response)).images).toHaveLength(1);
+  await back(page,'Phòng lưu trú');
   response=changed(page,`/households/me/rooms/${r.room.id}/submissions`);await page.getByRole('button',{name:'Gửi xét duyệt',exact:true}).click();r=await saved(response);
   await api(request,`/admin/room-submissions/${r.profile.revisionId}/review`,{token:admin.accessToken,method:'POST',body:{version:r.profile.version,decision:'APPROVED'}});
   const published=await api(request,`/public/rooms/${r.room.id}`);expect(published.room.title).toBe('Phòng Flutter hướng vườn');
+  expect((await api(request,`/public/rooms/${r.room.id}/images`)).images).toHaveLength(1);
+  await page.getByRole('button',{name:'Xóa / lưu trữ',exact:true}).click();await fill(page,'Lý do','Ngừng nhận đặt để bảo trì');
+  response=changed(page,`/households/me/rooms/${r.room.id}`,'DELETE');await page.getByRole('button',{name:'Xác nhận',exact:true}).click();expect((await saved(response)).archivedAt).toBeTruthy();
+  expect((await request.get(`${base}/public/rooms/${r.room.id}`)).status()).toBe(404);
+  await page.getByRole('button',{name:'Khôi phục hồ sơ',exact:true}).click();await fill(page,'Lý do','Đã bảo trì xong');
+  response=changed(page,`/households/me/rooms/${r.room.id}/restore`);await page.getByRole('button',{name:'Xác nhận',exact:true}).click();expect((await saved(response)).archivedAt).toBeNull();
   await back(page,'Phòng lưu trú');await back(page,'Không gian hộ dân');
   await page.getByRole('button',{name:'Khám phá',exact:true}).click();await page.getByRole('button',{name:'Lưu trú',exact:true}).click();
   await page.getByRole('button',{name:/Xem chi tiết Phòng Flutter hướng vườn/}).click({position:{x:70,y:220}});

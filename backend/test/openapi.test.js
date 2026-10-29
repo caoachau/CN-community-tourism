@@ -70,6 +70,10 @@ test('OpenAPI is valid with resolved references and documents implemented system
     '/api/v1/households/me/rooms/{roomId}/pricing',
     '/api/v1/admin/room-submissions','/api/v1/admin/room-submissions/{revisionId}','/api/v1/admin/room-submissions/{revisionId}/review',
     '/api/v1/public/rooms','/api/v1/public/rooms/{roomId}',
+    ...['/api/v1/households/me','/api/v1/households/me/rooms/{roomId}','/api/v1/households/me/services/{serviceId}']
+      .flatMap(base=>[`${base}/restore`,`${base}/images`,`${base}/images/order`,`${base}/images/{imageId}`]),
+    ...['households','rooms','services'].map(kind=>`/api/v1/public/${kind}/{resourceId}/images`),
+    '/api/v1/admin/revisions/{revisionId}/images','/api/v1/media/{key}',
   ].sort());
   assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/admin/users/{userId}/status'].patch.security, [{ BearerAuth: [] }]);

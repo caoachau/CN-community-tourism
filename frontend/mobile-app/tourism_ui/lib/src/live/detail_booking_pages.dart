@@ -64,6 +64,7 @@ class _PublicDetailState extends State<PublicDetail> {
                     children: [
                       _ListingPhoto(
                         item,
+                        api: widget.api,
                         height: 300,
                         favorite: false,
                         image: item.kind == PublicKind.room ? 'detail' : null,
@@ -111,6 +112,12 @@ class _PublicDetailState extends State<PublicDetail> {
                       ),
                     ],
                   ),
+                  if (widget.kind != PublicKind.place)
+                    PublicGallery(
+                      api: widget.api,
+                      endpoint:
+                          '/public/${widget.kind.path}/${widget.id}/images',
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
                     child: Column(

@@ -54,6 +54,55 @@ TourismApi apiWith(
 );
 
 void main() {
+  test('binary upload retries with identical bytes after refresh and private previews use Bearer', () async {
+    final image = base64Decode(
+      'UklGRjoAAABXRUJQVlA4IC4AAADQAQCdASoEAAQAAUAmJaACdLoB+AADsAD+82mX/mwIGaH0wf+mkeNI8aR8poAA',
+    );
+    var uploads = 0, rotations = 0;
+    final api = apiWith((request) {
+      if (request.url.path.endsWith('/auth/login')) return ok(session());
+      if (request.url.path.endsWith('/auth/refresh')) {
+        rotations++;
+        return ok(session('next'));
+      }
+      expect(request.headers['Authorization'], isNotNull);
+      if (request.method == 'POST') {
+        uploads++;
+        expect(request.bodyBytes, image);
+        expect(request.headers['content-type'], 'application/octet-stream');
+        expect(request.url.queryParameters['version'], '2');
+        if (uploads == 1) return failure('UNAUTHENTICATED');
+        return ok({'images': [], 'mediaToken': 'next-token'});
+      }
+      expect(request.headers['Accept'], 'image/webp');
+      return http.Response.bytes(
+        image,
+        200,
+        headers: {'content-type': 'image/webp'},
+      );
+    }, MemoryVault());
+    addTearDown(api.dispose);
+    await api.authenticate({
+      'email': 'test@example.invalid',
+      'password': 'test-only-password',
+    });
+    await api.request(
+      'POST',
+      '/households/me/images',
+      bytes: image,
+      query: {'revisionId': '1', 'version': 2, 'expectedToken': 'token'},
+    );
+    expect(uploads, 2);
+    expect(rotations, 1);
+    expect(
+      await api.imageBytes('/media/00000000-0000-0000-0000-000000000000.webp'),
+      image,
+    );
+    await expectLater(
+      api.imageBytes('https://outside.invalid/media/x'),
+      throwsA(isA<ApiFailure>()),
+    );
+  });
   test('login uses the API, preserves string IDs, stores only refresh and sends Bearer', () async {
     final vault = MemoryVault();
     late TourismApi api;

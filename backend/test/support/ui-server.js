@@ -5,6 +5,7 @@ import {createServer} from 'node:http';
 import {fileURLToPath} from 'node:url';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import mysql from 'mysql2/promise';
 import {createTestDatabase} from './mysql.js';
 import {testDatabaseOptions,HarnessError} from './config.js';
@@ -22,10 +23,13 @@ import {createServiceRepository} from '../../src/services/repository.js';
 import {createServiceService} from '../../src/services/service.js';
 import {createRoomRepository} from '../../src/rooms/repository.js';
 import {createRoomService} from '../../src/rooms/service.js';
+import {createContentRepository} from '../../src/content/repository.js';
+import {createContentService} from '../../src/content/service.js';
+import {createImageStorage} from '../../src/content/storage.js';
 import {createLogger} from '../../src/shared/logger.js';
 
 if(process.env.NODE_ENV!=='test')throw new Error('UI acceptance server requires NODE_ENV=test');
-let database,pool,server;
+let database,pool,server,mediaDirectory;
 try {
   database=await createTestDatabase(process.env,{schema:'survey'});
   pool=mysql.createPool({...testDatabaseOptions(),database:database.name,connectionLimit:8});
@@ -33,7 +37,9 @@ try {
   const passwordHash=await hashPassword('Isolated UI test administrator password');
   await authRepository.transaction(tx=>tx.createUser({email:'ui-admin@example.invalid',displayName:'Admin kiểm thử',passwordHash,role:'ADMIN'}));
   const authService=createAuthService({repository:authRepository,options:authOptions({JWT_SECRET:randomBytes(48).toString('base64url')})});
+  mediaDirectory=await fs.mkdtemp(path.join(os.tmpdir(),'ctp-ui-media-'));
   const app=createApp({authService,logger:createLogger({env:{LOG_LEVEL:'silent'}}),allowedOrigins:['http://127.0.0.1:5177','http://localhost:5177','http://127.0.0.1:5005'],
+    contentService:createContentService({repository:createContentRepository(access),storage:createImageStorage({NODE_ENV:'test',MEDIA_STORAGE_DIR:mediaDirectory})}),
     householdService:createHouseholdService({repository:createHouseholdRepository(access)}),catalogService:createCatalogService({repository:createCatalogRepository(access)}),
     serviceService:createServiceService({repository:createServiceRepository(access)}),roomService:createRoomService({repository:createRoomRepository(access)})});
   const root=path.resolve(fileURLToPath(new URL('../../../.cache/ui-e2e/mobile/',import.meta.url)));
@@ -52,5 +58,5 @@ try {
   console.log('Isolated UI test API ready at http://127.0.0.1:5005');
 }catch(error){console.error('UI test server failed to start:',error instanceof HarnessError?error.code:error.code==='EADDRINUSE'?'TEST_PORT_IN_USE':'TEST_SERVER_START_FAILED');await pool?.end();await database?.dispose();process.exitCode=1;}
 let stopping=false;
-async function stop(){if(stopping)return;stopping=true;await new Promise(resolve=>server?server.close(resolve):resolve());await pool?.end();await database?.dispose();process.exit();}
+async function stop(){if(stopping)return;stopping=true;await new Promise(resolve=>server?server.close(resolve):resolve());await pool?.end();await database?.dispose();if(mediaDirectory)await fs.rm(mediaDirectory,{recursive:true,force:true});process.exit();}
 process.on('SIGINT',stop);process.on('SIGTERM',stop);

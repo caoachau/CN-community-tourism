@@ -113,7 +113,7 @@ Ví dụ mở hồ sơ (có thể lưu nháp chỉ với `title`):
 }
 ```
 
-Gửi duyệt cần tên tối thiểu 3 ký tự, mô tả 20 ký tự, địa chỉ 5 ký tự, địa phương 2 ký tự và điện thoại hợp lệ 8–32 ký tự; thiếu trả `HOUSEHOLD_PROFILE_INCOMPLETE` (422). Tên tối đa 200, mô tả 20.000 ký tự, địa chỉ 500, địa phương 200; tối đa 20 phần giới thiệu. Schema lồng nhau là danh sách trường cho phép, không nhận giá/sức chứa/quyền trong `details`. SQL dùng `content_revisions` loại HOUSEHOLD/schema_version=1, ánh xạ camelCase sang `contact_phone`, `zalo_contact`, `introduction_sections`; không cần migration mới. Nội dung là văn bản; client hiển thị bằng text/escape thay vì thực thi HTML. Upload ảnh và quản lý nội dung phòng/dịch vụ thuộc module nội dung tiếp theo.
+Gửi duyệt cần tên tối thiểu 3 ký tự, mô tả 20 ký tự, địa chỉ 5 ký tự, địa phương 2 ký tự và điện thoại hợp lệ 8–32 ký tự; thiếu trả `HOUSEHOLD_PROFILE_INCOMPLETE` (422). Tên tối đa 200, mô tả 20.000 ký tự, địa chỉ 500, địa phương 200; tối đa 20 phần giới thiệu. Schema lồng nhau là danh sách trường cho phép, không nhận giá/sức chứa/quyền trong `details`. SQL dùng `content_revisions` loại HOUSEHOLD/schema_version=1, ánh xạ camelCase sang `contact_phone`, `zalo_contact`, `introduction_sections`; không cần migration mới. Nội dung là văn bản; client hiển thị bằng text/escape thay vì thực thi HTML. Quản lý phòng/dịch vụ đã có các API bên dưới; upload và quản lý ảnh theo phiên bản, xóa mềm/khôi phục được mô tả trong CONTENT.md.
 
 Mỗi lần lưu tạo revision DRAFT mới và giữ bản cũ để đối chiếu; `revisionId` và `version` chống ghi đè khi hai thiết bị cùng sửa. Bản PENDING không được sửa. Gửi lặp đúng bản PENDING trả `changed=false`. Bản đã bị từ chối phải được lưu thành nháp mới trước khi gửi lại. Sai ID/version trả `STALE_VERSION` (409).
 
@@ -169,7 +169,7 @@ Ví dụ tạo điểm phục vụ:
 }
 ```
 
-Nháp chỉ bắt buộc `title`; gửi duyệt cần title 3–200, body 20–20.000, address 5–500, locality 2–200 ký tự. Thiếu trả `PLACE_PROFILE_INCOMPLETE` (422). Tọa độ tùy chọn hoặc null; khi có phải đủ latitude/longitude dạng số, lần lượt trong [-90,90]/[-180,180]. Hướng dẫn đến tối đa 4.000 ký tự, điện thoại tùy chọn theo cùng định dạng hồ sơ hộ. Đây là metadata địa điểm, chưa có bản đồ nhúng, upload ảnh hoặc lịch tài nguyên. SQL lưu `content_revisions` loại PLACE/schema_version=1; `contactPhone` ánh xạ `details.contact_phone`, địa chỉ/tọa độ/hướng dẫn không sao chép vào bảng gốc.
+Nháp chỉ bắt buộc `title`; gửi duyệt cần title 3–200, body 20–20.000, address 5–500, locality 2–200 ký tự. Thiếu trả `PLACE_PROFILE_INCOMPLETE` (422). Tọa độ tùy chọn hoặc null; khi có phải đủ latitude/longitude dạng số, lần lượt trong [-90,90]/[-180,180]. Hướng dẫn đến tối đa 4.000 ký tự, điện thoại tùy chọn theo cùng định dạng hồ sơ hộ. Đây là metadata địa điểm, chưa có bản đồ nhúng hoặc lịch tài nguyên; quản lý ảnh hồ sơ hộ/phòng/dịch vụ xem CONTENT.md. SQL lưu `content_revisions` loại PLACE/schema_version=1; `contactPhone` ánh xạ `details.contact_phone`, địa chỉ/tọa độ/hướng dẫn không sao chép vào bảng gốc.
 
 Chỉ HOUSEHOLD đang sở hữu hộ APPROVED và chưa archived được tạo/lưu/gửi điểm. CUSTOMER đang xin mở hộ chưa có quyền này. ADMIN chỉ dùng route kiểm duyệt; không quản lý điểm thay chủ hộ. Mọi route `/me` lấy hộ từ tài khoản, truy root bằng cả place ID và household ID; không nhận owner/hộ/code/pointer do client khai. ID thiếu và ID thuộc hộ khác đều trả 403 ở route quản lý. Hộ REVOKED vẫn xem được lịch sử; chỉ được đặt trạng thái không AVAILABLE đồng thời HIDDEN, không mở lại/công khai nội dung mới. Các lệnh kiểm lại user/role/phiên và chủ sở hữu trong transaction theo thứ tự khóa thống nhất với auth/hồ sơ hộ.
 
@@ -343,7 +343,7 @@ Khi còn hạng mục phòng chưa giải phóng, chưa kết thúc trong reserv
 
 Public chỉ lấy pointer APPROVED của phòng, hộ và điểm; cả ba phải chưa archive, VISIBLE và đang cho phép cung cấp, chủ hộ ACTIVE/HOUSEHOLD, hộ APPROVED. Không lộ nháp, review note, tài khoản, token hoặc giá chụp trong lịch sử kiểm duyệt. Query hỗ trợ `page`, `pageSize`, `householdId`, `placeId`, `q`, `guests`, `minPriceVnd`, `maxPriceVnd`; `guests` kiểm `maxGuests >= guests`, khoảng giá bao gồm hai đầu. Từ khóa `%`, `_`, `!` được tìm theo ký tự thường, không biến thành wildcard SQL. Kết quả **không xác nhận còn phòng theo ngày**; chưa nhận ngày đến/ngày đi ở endpoint này.
 
-Lỗi riêng: `ROOM_PROFILE_INCOMPLETE` (422), `ROOM_PLACE_NOT_READY` (409), `ROOM_CONFIGURATION_LOCKED` (409). Validation/ownership/trạng thái dùng mã chung. Ghi root/revision, audit và thông báo xét duyệt cùng commit/rollback. Không có xóa cứng, upload ảnh, lịch phòng, chặn phòng hoặc đặt phòng trong module này.
+Lỗi riêng: `ROOM_PROFILE_INCOMPLETE` (422), `ROOM_PLACE_NOT_READY` (409), `ROOM_CONFIGURATION_LOCKED` (409). Validation/ownership/trạng thái dùng mã chung. Ghi root/revision, audit và thông báo xét duyệt cùng commit/rollback. Xóa mềm/khôi phục và quản lý ảnh theo phiên bản xem CONTENT.md. Không xóa cứng; lịch phòng, chặn phòng và đặt phòng chưa thuộc module này.
 
 ## Phản hồi và request ID
 
@@ -401,7 +401,7 @@ apiRouter.get('/items', validate({ query: paginationSchema }), async (_req, res)
 - Dùng `z.strictObject(...)` cho request có danh sách trường cố định để từ chối trường ngoài contract. Kiểm tra cả object lồng nhau. Schema phân trang chỉ nhận chuỗi số nguyên dương ở query: `page` mặc định 1, tối đa 100000; `pageSize` mặc định 20, tối đa 100. Query trùng tên, số thập phân hoặc trường lạ bị từ chối.
 - `databaseIdSchema` nhận ID dạng chuỗi số dương đến giới hạn MySQL `BIGINT UNSIGNED`. Không ép ID sang `Number`, vì có thể mất chính xác.
 - `vndAmountSchema` nhận số nguyên VND không âm, tối đa 999999999999999, phù hợp `DECIMAL(15,0)`. Schema cụ thể vẫn phải giới hạn giá/số lượng theo nghiệp vụ. Tổng tiền chính thức luôn do backend tính.
-- Middleware có schema `body` yêu cầu JSON hoặc `application/*+json`. JSON parser giới hạn 1 MiB. Upload sau này cần middleware riêng.
+- Middleware có schema `body` yêu cầu JSON hoặc `application/*+json`. JSON parser giới hạn 1 MiB. Upload ảnh dùng middleware raw riêng, tối đa 8 MiB; xem CONTENT.md.
 - Lỗi schema trả tối đa 50 chi tiết; không trả input, danh sách khóa lạ hoặc thông điệp refinement có thể chứa dữ liệu nhập. `path` gồm tên trường/chỉ số phần tử. Quy tắc tùy chỉnh dùng thông điệp an toàn mặc định.
 - Validation chỉ kiểm tra hình dạng và giá trị đầu vào. Ownership, trạng thái, thời hạn, giá, phiên bản và khả dụng phải được kiểm tra trong application service/transaction theo đặc tả. Không dùng schema để thay thế các kiểm tra đó.
 

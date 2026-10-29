@@ -12,6 +12,7 @@ import { createHouseholdRouter, createHouseholdAdminRouter } from './households/
 import { createPublicCatalogRouter, createOwnedPlaceRouter, createCategoryAdminRouter, createPlaceReviewRouter } from './catalog/router.js';
 import { createOwnedServiceRouter,createServiceReviewRouter,createPublicServiceRouter } from './services/router.js';
 import { createOwnedRoomRouter,createRoomReviewRouter,createPublicRoomRouter } from './rooms/router.js';
+import { createContentRouter } from './content/router.js';
 
 export function createApp({
   checkDatabase,
@@ -24,6 +25,7 @@ export function createApp({
   catalogService,
   serviceService,
   roomService,
+  contentService,
   trustProxy = 0,
 } = {}) {
   const app = express();
@@ -67,6 +69,7 @@ export function createApp({
       swaggerOptions: { validatorUrl: null, persistAuthorization: false },
     }));
   }
+  if (contentService && authService) app.use('/api/v1', createContentRouter(contentService, authService));
   if (authService) {
     app.use('/api/v1/auth', createAuthRouter(authService));
     app.use('/api/v1/admin', createAdminAccountRouter(authService));

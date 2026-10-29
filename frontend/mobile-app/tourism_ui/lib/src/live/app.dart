@@ -12,6 +12,7 @@ import 'api.dart';
 import 'common.dart';
 import 'definitions.dart';
 import 'management.dart';
+import 'media.dart';
 
 part 'reference_widgets.dart';
 part 'discovery_pages.dart';

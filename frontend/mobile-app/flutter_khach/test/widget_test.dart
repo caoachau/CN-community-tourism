@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_khach/main.dart';
@@ -17,6 +18,8 @@ class GuestApi extends TourismApi {
     Json? body,
     Map<String, dynamic>? query,
     bool authenticated = true,
+    Uint8List? bytes,
+    bool binary = false,
   }) async => {'items': [], 'total': 0, 'page': 1, 'pageSize': 20};
 }
 
