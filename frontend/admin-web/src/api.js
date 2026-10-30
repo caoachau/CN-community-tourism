@@ -3,6 +3,7 @@ export const messages = {
   UNAUTHENTICATED:'Phiên đã hết hiệu lực. Vui lòng đăng nhập lại.',ACCOUNT_BLOCKED:'Tài khoản đã bị khóa hoặc vô hiệu hóa.',
   FORBIDDEN:'Tài khoản không có quyền thực hiện thao tác này.',ADMIN_REQUIRED:'Tài khoản này dùng giao diện khách/hộ dân. Trang quản trị yêu cầu quyền ADMIN.',
   STALE_VERSION:'Nội dung đã thay đổi. Hãy tải lại và đối chiếu trước khi thao tác lại.',INVALID_STATE:'Trạng thái hiện tại không cho phép thao tác này.',
+  FINANCIAL_CONFLICT:'Chứng từ mâu thuẫn với số đã thu, khoản được hoàn hoặc lần đảo trước.',
   VALIDATION_ERROR:'Thông tin chưa hợp lệ. Kiểm tra các trường bên dưới.',NOT_FOUND:'Không tìm thấy nội dung hoặc tài khoản.',
   CATEGORY_ALREADY_EXISTS:'Mã danh mục đã tồn tại trong nhóm này.',HOUSEHOLD_NOT_APPROVED:'Hộ không còn đủ điều kiện nhận cam kết mới.',
   SERVICE_PLACE_NOT_READY:'Điểm tổ chức chưa được duyệt, đang ẩn hoặc ngừng cung cấp.',ROOM_PLACE_NOT_READY:'Điểm lưu trú chưa được duyệt, đang ẩn hoặc ngừng cung cấp.',

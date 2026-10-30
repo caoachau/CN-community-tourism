@@ -7,6 +7,7 @@ import 'common.dart';
 import 'definitions.dart';
 import 'media.dart';
 import 'calendar.dart';
+import 'bookings.dart';
 
 class SignInRequired extends StatelessWidget {
   const SignInRequired({super.key, required this.api});
@@ -365,6 +366,21 @@ class _HouseholdHomeState extends State<HouseholdHome> {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
+                  ListTile(
+                    leading: const Icon(Icons.receipt_long_outlined),
+                    title: const Text('Đơn đặt và sổ tiền'),
+                    subtitle: const Text(
+                      'Xác nhận, từ chối, hoàn thành và thu/hoàn tiền',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            BookingListPage(api: widget.api, host: true),
+                      ),
+                    ),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.calendar_month_outlined),
                     title: const Text('Lịch và sức chứa'),

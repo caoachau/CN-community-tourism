@@ -6,7 +6,7 @@ const limit = input => {
   if (!Number.isInteger(input.page)||input.page<1||input.page>100000||!Number.isInteger(input.pageSize)||input.pageSize<1||input.pageSize>100) throw new TypeError('Invalid pagination');
   return `LIMIT ${input.pageSize} OFFSET ${(input.page-1)*input.pageSize}`;
 };
-function queries(c) {
+export function createCalendarQueries(c) {
   const execute = (sql, values=[]) => c.execute({sql,timeout:10000},values);
   const first = async(sql,values=[]) => (await execute(sql,values))[0][0]??null;
   const rows = async(sql,values=[]) => (await execute(sql,values))[0];
@@ -121,5 +121,5 @@ function queries(c) {
   };
 }
 export function createCalendarRepository(database) {
-  return {transaction:work=>database.transaction(c=>work(queries(c)))};
+  return {transaction:work=>database.transaction(c=>work(createCalendarQueries(c)))};
 }

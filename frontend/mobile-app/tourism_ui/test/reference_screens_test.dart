@@ -43,18 +43,21 @@ void main() {
       expect(find.text('Khám phá\nViệt Nam thật khác'), findsOneWidget);
       await tester.tap(find.text('Khám phá ngay'));
       await tester.pumpAndSettle();
-      for (final name in ['Yêu thích', 'Đặt chỗ', 'Tin nhắn']) {
+      for (final name in ['Yêu thích', 'Tin nhắn']) {
         await tester.tap(find.text(name));
         await tester.pumpAndSettle();
         expect(find.textContaining('Chức năng chưa khả dụng'), findsOneWidget);
         await tester.tap(find.text('Đã hiểu'));
         await tester.pumpAndSettle();
       }
+      await tester.tap(find.text('Đặt chỗ'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextFormField, 'Email *'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
   testWidgets(
-    'detail explains missing booking before allowing a visual preview',
+    'detail requires authentication before selecting a real booking',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -80,11 +83,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Đặt ngay'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Chức năng giữ chỗ và đặt dịch vụ chưa được mở'), findsOneWidget);
-      await tester.tap(find.text('Xem bố cục'));
-      await tester.pumpAndSettle();
-      expect(find.text('Chọn ngày lưu trú'), findsOneWidget);
-      expect(find.text('Chưa kiểm tra chỗ trống'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Email *'), findsOneWidget);
+      expect(find.text('Thêm phòng vào giỏ'), findsNothing);
       expect(requests.first, 'GET /api/v1/public/rooms/31');
       expect(
         requests.skip(1),
@@ -144,7 +144,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Thanh toán'));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('không tạo giao dịch hoặc thu tiền'),
+        find.textContaining('Màn xem thử này không tạo giao dịch'),
         findsOneWidget,
       );
       expect(requests, isEmpty);

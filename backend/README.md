@@ -1,5 +1,7 @@
 # Backend API
 
+Booking nhiều phòng/dịch vụ, AvailabilityService, giữ chỗ/hết hạn, sổ thu/hoàn và review: xem [BOOKINGS.md](BOOKINGS.md). Flutter và React Admin dùng chung API; tận dụng schema hiện tại, không cần migration mới.
+
 Quản lý khung giờ, sức chứa, tài nguyên, lịch chặn và khả dụng công khai: xem [CALENDAR.md](CALENDAR.md). Các endpoint mới được tích hợp trong Swagger và dùng schema hiện có.
 
 Quản lý ảnh theo phiên bản, xóa mềm/khôi phục hồ sơ hộ dân, phòng và dịch vụ: xem [CONTENT.md](CONTENT.md). File `.env.example` có cấu hình ảnh local và S3; production cần storage bền vững.

@@ -10,7 +10,7 @@ export const reviewKinds={
   rooms:{title:'Phòng lưu trú',singular:'phòng lưu trú',path:'/admin/room-submissions',root:'room'},
   services:{title:'Dịch vụ / trải nghiệm',singular:'dịch vụ',path:'/admin/service-submissions',root:'service'},
 };
-function useRemote(api,path,query={}) {
+export function useRemote(api,path,query={}) {
   const [version,setVersion]=useState(0),[state,setState]=useState({data:null,error:null,loading:true}),signature=JSON.stringify(query);
   useEffect(()=>{
     let active=true;const controller=new AbortController();setState({data:null,error:null,loading:true});

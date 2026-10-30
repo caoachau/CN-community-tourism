@@ -18,10 +18,13 @@ import { createContentService } from './content/service.js';
 import { createImageStorage } from './content/storage.js';
 import { createCalendarRepository } from './calendar/repository.js';
 import { createCalendarService } from './calendar/service.js';
+import { createBookingRepository } from './bookings/repository.js';
+import { createBookingService,startBookingExpiry } from './bookings/service.js';
 
 const port = Number(process.env.PORT ?? '5000');
 let database;
 let server;
+let stopBookingExpiry;
 const startupDeadline = setTimeout(() => {
   logger.error({ event: 'startup_failed', code: 'STARTUP_TIMEOUT' }, 'Startup failed');
   process.exit(1);
@@ -40,12 +43,14 @@ try {
   const roomService = createRoomService({ repository: createRoomRepository(database) });
   const contentService = createContentService({ repository: createContentRepository(database), storage: createImageStorage() });
   const calendarService = createCalendarService({repository:createCalendarRepository(database),serviceService,roomService});
-  const app = createApp({ checkDatabase: () => database.check(), logger, authService, householdService, catalogService, serviceService, roomService, contentService, calendarService, trustProxy: options.trustProxy });
+  const bookingService=createBookingService({repository:createBookingRepository(database)});
+  const app = createApp({ checkDatabase: () => database.check(), logger, authService, householdService, catalogService, serviceService, roomService, contentService, calendarService, bookingService, trustProxy: options.trustProxy });
   server = await new Promise((resolve, reject) => {
     const listener = app.listen(port, '0.0.0.0', () => resolve(listener));
     listener.once('error', reject);
   });
   logger.info({ event: 'server_started', port }, 'API listening');
+  stopBookingExpiry=startBookingExpiry(bookingService,logger);
 } catch (error) {
   logger.error({ event: 'startup_failed', code: error instanceof AuthConfigError ? error.code : databaseErrorCode(error) }, 'Startup failed');
   try {
@@ -69,6 +74,7 @@ async function shutdown() {
   }, 10_000);
   try {
     if (server) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await stopBookingExpiry?.();
     await database?.close();
     logger.info({ event: 'shutdown_completed' }, 'API stopped');
   } catch {

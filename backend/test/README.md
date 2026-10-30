@@ -1,5 +1,7 @@
 # Harness kiểm thử và MySQL test database
 
+Suite `integration/bookings.test.js` kiểm chứng giỏ hỗn hợp, khóa chống trùng, tranh chỗ cuối, hold/expiry, báo giá/snapshot, trạng thái, giới hạn giữ, sổ thu/hoàn/điều chỉnh/đảo, review và phân quyền. Widget test Flutter kiểm tra cả thử lại sau mất mạng/chuyển màn và xóa dữ liệu khi đổi phiên. Browser acceptance `e2e/bookings.spec.js` tạo booking từ Flutter, xử lý ở hộ và đọc cùng chứng từ trong React Admin. Xem [BOOKINGS.md](../BOOKINGS.md).
+
 Suite `integration/content.test.js` kiểm chứng quản lý ảnh và xóa mềm/khôi phục bằng HTTP trên schema khảo sát: upload ảnh thật, thứ tự/ảnh bìa/gỡ ảnh, snapshot theo phiên bản, quyền chủ hộ/Admin/khách, giới hạn và upload đồng thời, rollback khi audit lỗi, thu hồi quyền và giữ nguyên dữ liệu đặt phòng. Unit test `content.test.js` kiểm tra giải mã, metadata, giới hạn tài nguyên và storage local. Xem [hướng dẫn chức năng](../CONTENT.md).
 
 Harness dùng Node.js `node:test`, mysql2/promise và MySQL **8.4.11** trong Docker. Unit test chạy độc lập; integration test chạy migration thật và truy vấn trên InnoDB. MySQL local được publish ở loopback `127.0.0.1:3307`.
@@ -77,7 +79,7 @@ Migration preflight hiện hỗ trợ DDL khởi tạo trong repository, tên b�
 
 ## Phạm vi kiểm chứng
 
-`rooms.test.js` kiểm tra API phòng và Swagger trên schema 003: ownership cho từng route, giá VND theo đêm, giờ nhận/trả địa phương, điểm thuộc hộ, nháp/gửi/duyệt/từ chối, bản công khai cũ, giá chụp khi gửi và snapshot booking thật không đổi sau khi cập nhật giá. Có kiểm tra cam kết COMMITTED/HELD còn hạn, hết hạn trước worker, hạng mục đã giải phóng/kết thúc, đọc cam kết mới sau một consistent read cũ, tranh chấp sửa/giá/duyệt, rollback audit/thông báo, lọc giá/sức chứa, điều kiện công khai, thu hồi phê duyệt và kiểm lại user/role/session dưới khóa. Chạy trên MySQL local riêng cùng auth/households/catalog/services; không ghi lên Aiven. API lịch/khả dụng được kiểm nghiệm trong calendar.test.js; API booking chưa được triển khai.
+`rooms.test.js` kiểm tra API phòng và Swagger trên schema 003: ownership cho từng route, giá VND theo đêm, giờ nhận/trả địa phương, điểm thuộc hộ, nháp/gửi/duyệt/từ chối, bản công khai cũ, giá chụp khi gửi và snapshot booking thật không đổi sau khi cập nhật giá. Có kiểm tra cam kết COMMITTED/HELD còn hạn, hết hạn trước worker, hạng mục đã giải phóng/kết thúc, đọc cam kết mới sau một consistent read cũ, tranh chấp sửa/giá/duyệt, rollback audit/thông báo, lọc giá/sức chứa, điều kiện công khai, thu hồi phê duyệt và kiểm lại user/role/session dưới khóa. Chạy trên MySQL local riêng cùng auth/households/catalog/services; không ghi lên Aiven. API lịch/khả dụng được kiểm nghiệm trong calendar.test.js; booking và sổ tiền trong bookings.test.js.
 
 `services.test.js` kiểm tra API dịch vụ/offer và Swagger trên schema 003: category SERVICE và ownership điểm phục vụ, nháp/gửi/duyệt, snapshot offer, khóa cấu trúc đã gửi/đã gắn lịch, stale profile/offer/token, giá/phụ phí độc lập snapshot, giữ nguyên dữ liệu booking đã chốt, giới hạn 32 offer khi tranh chấp, rollback giá/audit/review/thông báo, public filters cùng một offer, wildcard, các điều kiện công khai và thu hồi quyền. Test chạy trên MySQL local riêng và hồi quy cùng auth/catalog/households; không seed hoặc tạo dữ liệu thử trên Aiven.
 
@@ -91,7 +93,7 @@ Suite có 9 ca cho runner `001`: plan không ghi dữ liệu, cờ tạo databas
 
 Thiết kế hiện tại có thêm 20 nhóm kiểm tra DDL và prototype transaction: chạy `node backend/test/design/validate.mjs` từ thư mục gốc sau khi MySQL test đã chạy. Script chỉ dùng MySQL cục bộ, đọc `Tai lieu he thong/Thiet ke CSDL/schema.sql`; kết quả và metadata được xuất vào `tmp/schema-validation/` đã Git-ignore. Những prototype này chưa thay thế kiểm thử các API nghiệp vụ thực tế.
 
-API lịch/khả dụng có suite `calendar.test.js` riêng, kiểm tra sức chứa, lịch trùng, quota tài nguyên, giữ chỗ hết hạn, ownership và Swagger trên schema khảo sát. Các endpoint tạo/giữ chỗ booking, xác nhận phương án và báo cáo vẫn cần implementation và kiểm thử nghiệp vụ riêng. Việc suite đạt không có nghĩa 12 kịch bản nghiệm thu nghiệp vụ đã hoàn thành.
+API lịch/khả dụng có suite `calendar.test.js` riêng, kiểm tra sức chứa, lịch trùng, quota tài nguyên, giữ chỗ hết hạn, ownership và Swagger trên schema khảo sát. Các endpoint tạo/giữ chỗ/xử lý booking, thu/hoàn và review đã được kiểm tra trong bookings.test.js; xác nhận phương án riêng và báo cáo tổng hợp còn thuộc luồng mở rộng. Việc suite đạt không có nghĩa 12 kịch bản nghiệm thu nghiệp vụ đã hoàn thành.
 
 Workflow [backend-tests.yml](../../.github/workflows/backend-tests.yml) chạy cùng các lệnh trên GitHub Actions với database Docker riêng và không cần secret Aiven. Workflow mới được thêm vào repository; chỉ có kết quả local cho đến khi được push và chạy trên GitHub.
 

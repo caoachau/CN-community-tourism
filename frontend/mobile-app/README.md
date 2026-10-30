@@ -42,7 +42,7 @@ Thêm `http://localhost:5174` vào `CORS_ORIGIN` của backend rồi khởi đ�
 
 Admin web tại `frontend/admin-web`: duyệt hộ/điểm/phòng/dịch vụ, quản lý danh mục, khóa/mở tài khoản. Dùng tài khoản ADMIN được cấp nội bộ. Backend kiểm tra role, ownership và khóa tài khoản.
 
-Backend chưa có API tài nguyên, lịch phục vụ và booking. Các màn chọn ngày và thanh toán cho phép xem bố cục sau khi xác nhận thông báo, không gửi yêu cầu đặt, giữ chỗ hoặc ghi nhận tiền.
+Lịch, tài nguyên và lịch chặn đã có API. Luồng đặt thật hỗ trợ giỏ nhiều phòng/dịch vụ cùng hộ, báo giá từ server, giữ chỗ/hết hạn, xác nhận/từ chối/hủy/hoàn thành, sổ thu/hoàn/điều chỉnh/đảo và review sau hoàn thành. Xem [BOOKINGS.md](../../backend/BOOKINGS.md). Các widget ReferenceBooking/ReferenceCheckout còn lại dành cho kiểm tra bản thiết kế cũ, không được gọi từ nút Đặt ngay của ứng dụng kết nối API.
 
 ## Đối chiếu 9 ảnh thiết kế
 
@@ -51,16 +51,16 @@ Giao diện chạy mặc định được dựng bằng widget Flutter theo 9 �
 | Trang | Đã hoạt động | Phần được ghi chú và hiện thông báo khi bấm |
 | --- | --- | --- |
 | Chào mừng | Khám phá, đăng nhập, đăng ký CUSTOMER | — |
-| Trang chủ | Nội dung đã duyệt, giá, nhóm dịch vụ, tìm kiếm | Yêu thích, đặt chỗ, tin nhắn, thông báo |
+| Trang chủ | Nội dung đã duyệt, giá, nhóm dịch vụ, tìm kiếm, mục Đặt chỗ | Yêu thích, tin nhắn, thông báo |
 | Tìm kiếm | Từ khóa, loại nội dung, bộ lọc API, phân trang | Xếp hạng phổ biến; bản đồ chỉ xem bố cục |
-| Chi tiết | Nội dung, tiện nghi/offer, giá, địa điểm, sao chép liên hệ/thông tin | Đánh giá, yêu thích, tin nhắn và đặt trực tuyến |
+| Chi tiết | Nội dung/ảnh, tiện nghi/offer, lịch trống, chọn đặt thật, review công khai và liên hệ | Yêu thích và tin nhắn |
 | Bản đồ | Thẻ nội dung công khai, chuyển sang chi tiết/tìm kiếm | Nền và ghim chỉ minh họa; không phải tọa độ thật, không định vị/chỉ đường |
-| Chọn ngày | Chọn khoảng ngày, số khách, phương thức bán để xem thử | Chưa kiểm tra còn chỗ/tài nguyên, không tạo booking |
-| Thanh toán | Tóm tắt lựa chọn và giá dự kiến; thông tin tài khoản | Gửi đặt/ghi thu chưa có API; ví, thẻ và voucher ngoài MVP |
-| Cá nhân | Tài khoản thật, đăng nhập/đăng xuất, mở không gian hộ | Sửa hồ sơ cá nhân, yêu thích, lịch sử, đánh giá; số liệu thiếu hiển thị “—” |
-| Tổng quan hộ | Hồ sơ hộ, quản lý điểm/phòng/dịch vụ/offer, xét duyệt | Đơn đặt, lượt khách, thu nhập, đánh giá, lịch và tin nhắn |
+| Chọn ngày | Phòng theo ngày, slot/offer theo lịch thật, số người/đơn vị/phụ phí | — |
+| Giỏ / đặt chỗ | Nhiều hạng mục, báo giá và điều kiện từ server, giữ chỗ, thử lại an toàn | Chuyển tiền qua ví/thẻ và voucher ngoài MVP |
+| Cá nhân | Tài khoản, chuyến đi, hủy đơn, review đơn hoàn thành, không gian hộ | Sửa hồ sơ cá nhân, yêu thích; số liệu tổng hợp thiếu hiển thị “—” |
+| Tổng quan hộ | Hồ sơ/nội dung, lịch/sức chứa, đơn đặt, sổ tiền và review công khai | Biểu đồ thống kê tổng hợp và tin nhắn |
 
-Ảnh cảnh quan tái sử dụng từ tài nguyên bộ thiết kế. Thẻ dịch vụ ghi “Ảnh minh họa” vì API hiện chưa cung cấp ảnh thực tế. Không dùng số lượt đặt, sao đánh giá, số dư, doanh thu hoặc lịch trống giả. Giá dự kiến chưa phải báo giá chấp nhận; theo giờ cần xác nhận thời lượng. `MissingFeature` trong `lib/src/live/reference_widgets.dart` tập trung nội dung cảnh báo.
+Ảnh tải lên theo phiên bản được dùng ở các gallery; ảnh thiết kế còn dùng làm ảnh minh họa. Không dùng số lượt đặt, sao đánh giá, doanh thu hoặc lịch trống giả. Giá trị booking được server chốt, bao gồm cách tính theo giờ từ thời lượng slot. `MissingFeature` trong `lib/src/live/reference_widgets.dart` dành cho các phần ngoài phạm vi và màn xem thử cũ.
 
 Android lưu refresh token bằng secure storage và tắt backup app; access token chỉ giữ trong bộ nhớ. Flutter web và Admin giữ phiên trong bộ nhớ, tải lại trang cần đăng nhập lại. Không lưu token trong localStorage, URL hoặc log. Mở lại app/chuyển tab tải user hiện hành.
 

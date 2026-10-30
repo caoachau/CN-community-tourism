@@ -65,11 +65,11 @@ enum MissingFeature {
   ),
   booking(
     'Đặt chỗ và lịch phục vụ',
-    'Bạn có thể xem lịch và sức chứa. Chức năng giữ chỗ và đặt dịch vụ chưa được mở; xem bố cục chọn ngày sẽ chưa gửi yêu cầu đặt.',
+    'Bạn có thể đặt phòng và dịch vụ từ trang chi tiết, hoặc quản lý chuyến đi ở mục Đặt chỗ.',
   ),
   payment(
     'Thanh toán trực tiếp',
-    'Chưa có API ghi nhận đặt chỗ và thu tiền. Màn hình này chỉ minh họa thông tin dự kiến; không tạo giao dịch hoặc thu tiền.',
+    'Màn xem thử này không tạo giao dịch. Để đặt thật, thêm phòng/dịch vụ vào giỏ ở trang chi tiết; hộ ghi nhận khoản tiền trong đơn đặt.',
   ),
   gateway(
     'Thanh toán trực tuyến',
@@ -85,7 +85,7 @@ enum MissingFeature {
   ),
   reviews(
     'Đánh giá',
-    'Chưa có API đánh giá và lịch sử trải nghiệm. Khi triển khai, chỉ khách có booking hoàn thành mới được đánh giá.',
+    'Mở chuyến đi đã hoàn thành trong mục Đặt chỗ để viết hoặc xem đánh giá.',
   ),
   vouchers(
     'Mã giảm giá',
@@ -97,7 +97,7 @@ enum MissingFeature {
   ),
   statistics(
     'Thống kê thu nhập',
-    'Chưa có API booking và sổ thu chi để tính thống kê. Các chỉ số đang để trống, không phải doanh thu bằng 0.',
+    'Biểu đồ thống kê tổng hợp chưa triển khai. Các chứng từ thu/hoàn thực tế đã có trong mục Đơn đặt và sổ tiền.',
   ),
   profile(
     'Chỉnh sửa tài khoản',

@@ -422,7 +422,11 @@ class _DataFormState extends State<DataForm> {
       return 'Nhập từ ${f.minLength} đến ${f.maxLength} ký tự';
     }
     if (f.kind == InputKind.integer) {
-      if (!RegExp(r'^\d+$').hasMatch(value)) return 'Nhập số nguyên';
+      if (!(f.min < 0 ? RegExp(r'^-?\d+$') : RegExp(r'^\d+$')).hasMatch(
+        value,
+      )) {
+        return 'Nhập số nguyên';
+      }
       final number = int.tryParse(value);
       if (number == null || number < f.min || number > f.max) {
         return 'Giá trị từ ${f.min} đến ${f.max}';
@@ -760,7 +764,7 @@ class _DataFormState extends State<DataForm> {
       enableSuggestions: f.kind != InputKind.password,
       maxLines: [InputKind.paragraph, InputKind.lines].contains(f.kind) ? 4 : 1,
       keyboardType: switch (f.kind) {
-        InputKind.integer => TextInputType.number,
+        InputKind.integer => TextInputType.numberWithOptions(signed: f.min < 0),
         InputKind.decimal => const TextInputType.numberWithOptions(
           decimal: true,
           signed: true,
@@ -775,7 +779,11 @@ class _DataFormState extends State<DataForm> {
           ? [AutofillHints.email]
           : null,
       inputFormatters: f.kind == InputKind.integer
-          ? [FilteringTextInputFormatter.digitsOnly]
+          ? [
+              f.min < 0
+                  ? FilteringTextInputFormatter.allow(RegExp(r'[-0-9]'))
+                  : FilteringTextInputFormatter.digitsOnly,
+            ]
           : null,
       decoration: InputDecoration(
         labelText: '${f.label}${f.required ? ' *' : ''}',

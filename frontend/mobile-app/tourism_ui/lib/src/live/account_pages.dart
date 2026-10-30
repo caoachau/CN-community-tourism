@@ -1,5 +1,22 @@
 part of 'app.dart';
 
+Future<void> _openBookings(
+  BuildContext context,
+  TourismApi api, {
+  bool host = false,
+  String? status,
+}) async {
+  if (!api.signedIn) {
+    await openAuthentication(context, api);
+  }
+  if (context.mounted && api.signedIn) {
+    _push(
+      context,
+      BookingListPage(api: api, host: host, initialStatus: status),
+    );
+  }
+}
+
 class LiveAccount extends StatefulWidget {
   const LiveAccount({super.key, required this.api, this.openHost});
   final TourismApi api;
@@ -123,9 +140,18 @@ class _LiveAccountState extends State<LiveAccount> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Row(
               children: [
-                _ProfileStat('Chuyến đi', MissingFeature.booking),
+                _ProfileStat(
+                  'Chuyến đi',
+                  MissingFeature.booking,
+                  onTap: () => _openBookings(context, widget.api),
+                ),
                 Container(height: 24, width: 1, color: uiBorder),
-                _ProfileStat('Đánh giá', MissingFeature.reviews),
+                _ProfileStat(
+                  'Đánh giá',
+                  MissingFeature.reviews,
+                  onTap: () =>
+                      _openBookings(context, widget.api, status: 'COMPLETED'),
+                ),
                 Container(height: 24, width: 1, color: uiBorder),
                 _ProfileStat('Địa điểm yêu thích', MissingFeature.favorites),
               ],
@@ -179,7 +205,19 @@ class _LiveAccountState extends State<LiveAccount> {
                     row.$1,
                     row.$2,
                     row.$3,
-                    () => featureAlert(context, row.$4),
+                    () =>
+                        [
+                          MissingFeature.booking,
+                          MissingFeature.reviews,
+                        ].contains(row.$4)
+                        ? _openBookings(
+                            context,
+                            widget.api,
+                            status: row.$4 == MissingFeature.reviews
+                                ? 'COMPLETED'
+                                : null,
+                          )
+                        : featureAlert(context, row.$4),
                   ),
                 ],
               ],
@@ -187,23 +225,25 @@ class _LiveAccountState extends State<LiveAccount> {
           ),
           _SectionTitle(
             'Chuyến đi sắp tới',
-            onTap: () => featureAlert(context, MissingFeature.booking),
+            onTap: () => _openBookings(context, widget.api),
           ),
           _EmptyTripCard(
             title: 'Lịch trình của bạn',
-            text: 'Chưa kết nối dữ liệu đặt chỗ.',
+            text: 'Xem các yêu cầu đang giữ chỗ và chuyến đi đã được hộ xác nhận.',
             icon: Icons.event_note_outlined,
-            onTap: () => featureAlert(context, MissingFeature.booking),
+            onTap: () => _openBookings(context, widget.api),
           ),
           _SectionTitle(
             'Chuyến đi đã hoàn thành',
-            onTap: () => featureAlert(context, MissingFeature.reviews),
+            onTap: () =>
+                _openBookings(context, widget.api, status: 'COMPLETED'),
           ),
           _EmptyTripCard(
             title: 'Những trải nghiệm đã qua',
-            text: 'Lịch sử và đánh giá chưa khả dụng.',
+            text: 'Mở chuyến đi đã hoàn thành để viết đánh giá.',
             icon: Icons.landscape_outlined,
-            onTap: () => featureAlert(context, MissingFeature.reviews),
+            onTap: () =>
+                _openBookings(context, widget.api, status: 'COMPLETED'),
           ),
           const _FeatureNote(
             'Các chỉ số “—” chưa có dữ liệu. Mục chưa triển khai sẽ hiện thông báo khi bấm.',
@@ -308,13 +348,14 @@ class _InitialAvatar extends StatelessWidget {
 }
 
 class _ProfileStat extends StatelessWidget {
-  const _ProfileStat(this.title, this.feature);
+  const _ProfileStat(this.title, this.feature, {this.onTap});
+  final VoidCallback? onTap;
   final String title;
   final MissingFeature feature;
   @override
   Widget build(BuildContext context) => Expanded(
     child: InkWell(
-      onTap: () => featureAlert(context, feature),
+      onTap: onTap ?? () => featureAlert(context, feature),
       child: Column(
         children: [
           const Text(
@@ -510,6 +551,14 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
             ),
           ),
+          ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: const Text('Đơn đặt và sổ tiền'),
+            onTap: () {
+              Navigator.pop(context);
+              _openBookings(this.context, widget.api, host: true);
+            },
+          ),
           for (final kind in ResourceKind.values)
             ListTile(
               leading: Icon(
@@ -683,12 +732,28 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
                           Expanded(
                             child: _Surface(
                               padding: const EdgeInsets.all(13),
-                              onTap: () => featureAlert(
-                                context,
-                                stat.$1.startsWith('Đánh')
-                                    ? MissingFeature.reviews
-                                    : MissingFeature.statistics,
-                              ),
+                              onTap: () => stat.$1.startsWith('Đánh')
+                                  ? _push(
+                                      context,
+                                      Scaffold(
+                                        appBar: AppBar(
+                                          title: const Text('Đánh giá của hộ'),
+                                        ),
+                                        body: ListView(
+                                          padding: const EdgeInsets.all(16),
+                                          children: [
+                                            PublicReviewsPanel(
+                                              api: widget.api,
+                                              householdId: h['id'].toString(),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : featureAlert(
+                                      context,
+                                      MissingFeature.statistics,
+                                    ),
                               child: Row(
                                 children: [
                                   Container(
@@ -752,7 +817,7 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
                     Icons.calendar_month_outlined,
                     const Color(0xFFFF881B),
                     Colors.white,
-                    () => featureAlert(context, MissingFeature.booking),
+                    () => _openBookings(context, widget.api, host: true),
                   ),
                   _CategoryShortcut(
                     'Tin nhắn',
@@ -831,7 +896,7 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
                 ),
               ),
               const _FeatureNote(
-                'Booking, doanh thu và đánh giá chưa được kết nối. Quản lý nội dung và gửi xét duyệt đã hoạt động.',
+                'Đơn đặt, thu/hoàn tiền và đánh giá đã dùng API chung. Báo cáo biểu đồ doanh thu tổng hợp chưa triển khai.',
                 feature: MissingFeature.statistics,
               ),
               _Surface(
@@ -840,14 +905,14 @@ class _HouseholdDashboardState extends State<HouseholdDashboard> {
                     _SectionTitle(
                       'Đơn đặt sắp tới',
                       onTap: () =>
-                          featureAlert(context, MissingFeature.booking),
+                          _openBookings(context, widget.api, host: true),
                     ),
                     _EmptyTripCard(
-                      title: 'Chưa kết nối lịch đặt',
-                      text: 'Danh sách đơn sẽ hiển thị tại đây.',
+                      title: 'Quản lý đơn đặt',
+                      text: 'Mở danh sách để xác nhận, từ chối và ghi nhận thu/hoàn tiền.',
                       icon: Icons.event_note_outlined,
                       onTap: () =>
-                          featureAlert(context, MissingFeature.booking),
+                          _openBookings(context, widget.api, host: true),
                     ),
                   ],
                 ),

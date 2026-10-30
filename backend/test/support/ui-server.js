@@ -28,6 +28,8 @@ import {createContentService} from '../../src/content/service.js';
 import {createImageStorage} from '../../src/content/storage.js';
 import {createCalendarRepository} from '../../src/calendar/repository.js';
 import {createCalendarService} from '../../src/calendar/service.js';
+import {createBookingRepository} from '../../src/bookings/repository.js';
+import {createBookingService} from '../../src/bookings/service.js';
 import {createLogger} from '../../src/shared/logger.js';
 
 if(process.env.NODE_ENV!=='test')throw new Error('UI acceptance server requires NODE_ENV=test');
@@ -44,7 +46,7 @@ try {
   const app=createApp({authService,logger:createLogger({env:{LOG_LEVEL:'silent'}}),allowedOrigins:['http://127.0.0.1:5177','http://localhost:5177','http://127.0.0.1:5005'],
     contentService:createContentService({repository:createContentRepository(access),storage:createImageStorage({NODE_ENV:'test',MEDIA_STORAGE_DIR:mediaDirectory})}),
     householdService:createHouseholdService({repository:createHouseholdRepository(access)}),catalogService:createCatalogService({repository:createCatalogRepository(access)}),
-    calendarService:createCalendarService({repository:createCalendarRepository(access),serviceService,roomService}),serviceService,roomService});
+    bookingService:createBookingService({repository:createBookingRepository(access)}),calendarService:createCalendarService({repository:createCalendarRepository(access),serviceService,roomService}),serviceService,roomService});
   const root=path.resolve(fileURLToPath(new URL('../../../.cache/ui-e2e/mobile/',import.meta.url)));
   const mime={'.html':'text/html','.js':'text/javascript','.json':'application/json','.wasm':'application/wasm','.ttf':'font/ttf','.otf':'font/otf','.png':'image/png','.jpg':'image/jpeg','.css':'text/css'};
   server=createServer(async(req,res)=>{

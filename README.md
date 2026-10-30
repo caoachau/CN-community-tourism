@@ -2,6 +2,8 @@
 
 Monorepo for the community tourism project: Express REST API, React admin, Flutter projects, and project documentation. Repository text files use UTF-8. Environment variable names are uppercase `SCREAMING_SNAKE_CASE`; secrets belong only in ignored local `.env` files or deployment secret stores. Runtime logs are one-line JSON to stdout/stderr.
 
+Booking nhiều phòng/dịch vụ, giữ chỗ/hết hạn, xử lý đơn, thu/hoàn tiền và review đã nối Flutter/React Admin. Xem [thiết kế và cách dùng](backend/BOOKINGS.md).
+
 ## Prerequisites
 
 - Node.js 22.12+ and npm 10+

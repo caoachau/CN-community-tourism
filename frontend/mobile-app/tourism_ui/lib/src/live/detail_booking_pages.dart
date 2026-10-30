@@ -221,9 +221,7 @@ class _PublicDetailState extends State<PublicDetail> {
                       ].indexed)
                         Expanded(
                           child: InkWell(
-                            onTap: () => i == 2
-                                ? featureAlert(context, MissingFeature.reviews)
-                                : setState(() => tab = i),
+                            onTap: () => setState(() => tab = i),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 15),
                               decoration: BoxDecoration(
@@ -390,10 +388,11 @@ class _PublicDetailState extends State<PublicDetail> {
                             label: const Text('Xem bản đồ'),
                           ),
                         ],
-                        const _FeatureNote(
-                          'Đặt chỗ và đánh giá chưa khả dụng. Bạn có thể xem lịch trống hoặc liên hệ trực tiếp với hộ.',
-                          feature: MissingFeature.booking,
-                        ),
+                        if (tab == 2)
+                          PublicReviewsPanel(
+                            api: widget.api,
+                            householdId: item.data['householdId'].toString(),
+                          ),
                         TextButton.icon(
                           onPressed: () => _contact(context, item),
                           icon: const Icon(Icons.phone_outlined, size: 17),
@@ -422,20 +421,23 @@ class _PublicDetailState extends State<PublicDetail> {
                   Expanded(
                     child: _PrimaryButton(
                       item.kind == PublicKind.place ? 'Liên hệ' : 'Đặt ngay',
-                      onTap: () => item.kind == PublicKind.place
-                          ? _contact(context, item)
-                          : featureAlert(
-                              context,
-                              MissingFeature.booking,
-                              preview: () => _push(
-                                context,
-                                ReferenceBooking(
-                                  api: widget.api,
-                                  kind: item.kind,
-                                  data: item.data,
-                                ),
-                              ),
-                            ),
+                      onTap: () async {
+                        if (item.kind == PublicKind.place) {
+                          _contact(context, item);
+                          return;
+                        }
+                        if (!widget.api.signedIn) {
+                          await openAuthentication(context, widget.api);
+                        }
+                        if (context.mounted && widget.api.signedIn) {
+                          await selectBookingItem(
+                            context,
+                            widget.api,
+                            item.kind.path,
+                            item.data,
+                          );
+                        }
+                      },
                     ),
                   ),
                 ],

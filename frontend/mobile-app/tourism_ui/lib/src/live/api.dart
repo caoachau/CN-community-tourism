@@ -51,6 +51,18 @@ const errorMessages = {
   'AVAILABILITY_CONFLICT': 'Khoảng thời gian này đã hết sức chứa hoặc trùng với lịch chặn/phân bổ khác.',
   'CALENDAR_COMMITMENT_CONFLICT': 'Thay đổi này ảnh hưởng đến cam kết đặt chỗ hoặc tài nguyên đang được sử dụng.',
   'RESOURCE_CODE_EXISTS': 'Hộ đã có tài nguyên với mã này.',
+  'HOLD_EXPIRED': 'Yêu cầu đã hết hạn giữ chỗ. Vui lòng kiểm tra và đặt lại.',
+  'HOLD_LIMIT': 'Bạn có tối đa 5 yêu cầu đang giữ chỗ. Hủy yêu cầu không cần thiết hoặc chờ hết hạn.',
+  'QUOTE_CHANGED':
+      'Giá hoặc điều kiện đã thay đổi. Hãy lấy báo giá mới và kiểm tra lại.',
+  'FINANCIAL_CONFLICT':
+      'Khoản tiền vượt số được thu/hoàn hoặc mâu thuẫn với chứng từ trước.',
+  'REVIEW_ALREADY_EXISTS': 'Booking này đã được đánh giá.',
+  'IDEMPOTENCY_CONFLICT':
+      'Yêu cầu thử lại có nội dung khác lần trước. Hãy tải lại dữ liệu.',
+  'CART_HOUSEHOLD_MISMATCH': 'Mỗi giỏ đặt chỗ dành cho một hộ. Hoàn tất hoặc gỡ giỏ hiện tại trước khi chọn hộ khác.',
+  'CART_LIMIT': 'Mỗi giỏ có tối đa 20 phòng và khung giờ dịch vụ.',
+  'BOOKING_REQUEST_PENDING': 'Có yêu cầu chưa xác định kết quả. Mở giỏ và thử lại yêu cầu trước khi chỉnh sửa.',
   'INVALID_IMAGE': 'Chọn ảnh JPEG, PNG hoặc WebP hợp lệ, tối đa 25 megapixel.',
   'IMAGE_LIMIT': 'Mỗi hồ sơ có tối đa 12 ảnh.',
   'PAYLOAD_TOO_LARGE': 'Ảnh quá lớn. Vui lòng chọn ảnh không quá 8 MB.',
@@ -126,6 +138,59 @@ class TourismApi extends ChangeNotifier {
   bool get signedIn => user != null;
   bool get isHousehold => user?['role'] == 'HOUSEHOLD';
   int get epoch => _epoch;
+  final List<Json> _bookingCart = [];
+  String? bookingHouseholdId;
+  int bookingCartRevision = 0;
+  Json? pendingBookingRequest, pendingBookingQuote;
+  List<Json> get bookingCart => List.unmodifiable(_bookingCart);
+  void addBookingItem(String householdId, String title, Json payload) {
+    if (!signedIn) throw const ApiFailure('UNAUTHENTICATED');
+    if (pendingBookingRequest != null) {
+      throw const ApiFailure('BOOKING_REQUEST_PENDING');
+    }
+    if (_bookingCart.isNotEmpty && bookingHouseholdId != householdId) {
+      throw const ApiFailure('CART_HOUSEHOLD_MISMATCH');
+    }
+    final identifier = payload['kind'] == 'ROOM'
+        ? payload['roomId']
+        : payload['slotId'];
+    final index = _bookingCart.indexWhere((row) {
+      final item = object(row['payload']);
+      return item['kind'] == payload['kind'] &&
+          (item['roomId'] ?? item['slotId']) == identifier;
+    });
+    if (index < 0 && _bookingCart.length >= 20) {
+      throw const ApiFailure('CART_LIMIT');
+    }
+    final row = <String, dynamic>{'title': title, 'payload': payload};
+    if (index < 0) {
+      _bookingCart.add(row);
+    } else {
+      _bookingCart[index] = row;
+    }
+    bookingHouseholdId = householdId;
+    bookingCartRevision++;
+    _notify();
+  }
+
+  void removeBookingItem(int index) {
+    if (pendingBookingRequest != null) {
+      throw const ApiFailure('BOOKING_REQUEST_PENDING');
+    }
+    _bookingCart.removeAt(index);
+    if (_bookingCart.isEmpty) bookingHouseholdId = null;
+    bookingCartRevision++;
+    _notify();
+  }
+
+  void clearBookingCart() {
+    pendingBookingRequest = null;
+    pendingBookingQuote = null;
+    _bookingCart.clear();
+    bookingHouseholdId = null;
+    bookingCartRevision++;
+    _notify();
+  }
 
   static String configuredBaseUrl() {
     const value = String.fromEnvironment('API_BASE_URL');
@@ -356,6 +421,7 @@ class TourismApi extends ChangeNotifier {
 
   Future<void> authenticate(Json input, {bool register = false}) async {
     final generation = ++_epoch;
+    clearBookingCart();
     await _accept(
       await _send(
         'POST',
@@ -376,6 +442,11 @@ class TourismApi extends ChangeNotifier {
 
   Future<void> clearSession({String? notice}) async {
     _epoch++;
+    pendingBookingRequest = null;
+    pendingBookingQuote = null;
+    _bookingCart.clear();
+    bookingHouseholdId = null;
+    bookingCartRevision++;
     user = null;
     _accessToken = null;
     _refreshToken = null;

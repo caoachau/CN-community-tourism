@@ -8,7 +8,7 @@ Sau khi cấu hình database/TLS và chạy `npm run dev:backend` từ root:
 - OpenAPI 3.0.3: `http://localhost:5000/api/openapi.json`.
 - Liveness: `GET /api/health`; readiness kiểm tra MySQL/TLS: `GET /api/ready`.
 
-Swagger mô tả health/readiness, xác thực, quản trị tài khoản, hồ sơ hộ, danh mục, điểm phục vụ và dịch vụ/trải nghiệm. OpenAPI được khai báo trong `src/openapi.js` và các module `auth`, `households`, `catalog`, `services`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài. Các API booking chưa được triển khai.
+Swagger mô tả các API đã triển khai: hệ thống, xác thực, hồ sơ/nội dung/ảnh, lịch và khả dụng, booking nhiều hạng mục, giữ chỗ/hết hạn, thu/hoàn tiền và review. OpenAPI được ghép từ các module trong `src/openapi.js`; UI dùng tài nguyên nội bộ và tắt validator bên ngoài. Thiết kế, quyền và luồng booking: [BOOKINGS.md](BOOKINGS.md).
 
 ## Đăng ký, đăng nhập và phiên JWT
 
@@ -50,7 +50,7 @@ Hạng mục được truy ngược qua tập giữ chỗ tới booking/phương
 
 Các lookup sau khảo sát yêu cầu migration `003`. `incident` chỉ trả dòng `complaints.feedback_kind='INCIDENT'`, không cho hộ đọc phản ánh riêng tư qua cùng guard. Đây là chính sách truy quyền; chưa bổ sung endpoint nghiệp vụ điểm phục vụ, cọc hoặc giao/trả.
 
-Các guard này là nền cho các module nghiệp vụ. API phòng và dịch vụ đã triển khai ở các mục bên dưới; API booking chưa triển khai. Khi tải dữ liệu sau guard phải giữ điều kiện chủ sở hữu trong truy vấn. Các thao tác ghi phải kiểm tra lại tài khoản, phiên, role, household và đối tượng dưới khóa trong chính transaction, tránh dùng kết quả middleware cũ để ghi dữ liệu. Đây cũng là nguyên tắc kiểm tra từng request và từng quan hệ sở hữu trong [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+Các guard này là nền cho các module nghiệp vụ. API phòng/dịch vụ được mô tả bên dưới; booking, giữ chỗ, thu/hoàn và review xem [BOOKINGS.md](BOOKINGS.md). Khi tải dữ liệu sau guard phải giữ điều kiện chủ sở hữu trong truy vấn. Các thao tác ghi phải kiểm tra lại tài khoản, phiên, role, household và đối tượng dưới khóa trong chính transaction, tránh dùng kết quả middleware cũ để ghi dữ liệu. Đây cũng là nguyên tắc kiểm tra từng request và từng quan hệ sở hữu trong [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
 
 API quản trị đã triển khai:
 
@@ -269,7 +269,7 @@ Giá và trạng thái bán cập nhật độc lập qua `/pricing`, kể cả 
 }
 ```
 
-Chỉ gửi addonPrices nếu key đã được tạo. Snapshot đã gửi/được chấp nhận vẫn giữ giá tại thời điểm đó; khách xem giá hiện hành từ offer và snapshot cấu trúc đã duyệt. Giá riêng từng slot, sức chứa, mức dùng tài nguyên và khả dụng đã có trong module lịch; xem CALENDAR.md. Giữ chỗ và tính tiền booking chưa thuộc module này. Hộ bị thu hồi duyệt hoặc dịch vụ RETIRED vẫn đọc lịch sử, nhưng chỉ được tắt offer (isActive=false, không đổi giá/addon); không được mở lại. Root RETIRED không trở lại AVAILABLE. Hộ archived không ghi thay đổi.
+Chỉ gửi addonPrices nếu key đã được tạo. Snapshot đã gửi/được chấp nhận vẫn giữ giá tại thời điểm đó; khách xem giá hiện hành từ offer và snapshot cấu trúc đã duyệt. Giá riêng từng slot, sức chứa, mức dùng tài nguyên và khả dụng đã có trong module lịch; xem CALENDAR.md. Giữ chỗ và tính tiền thuộc module booking, xem [BOOKINGS.md](BOOKINGS.md). Hộ bị thu hồi duyệt hoặc dịch vụ RETIRED vẫn đọc lịch sử, nhưng chỉ được tắt offer (isActive=false, không đổi giá/addon); không được mở lại. Root RETIRED không trở lại AVAILABLE. Hộ archived không ghi thay đổi.
 
 Admin chỉ duyệt đúng latest revision/version; snapshot cấu trúc phải còn khớp các offer gốc và tham chiếu phải còn hợp lệ. Chấp thuận cập nhật pointer/category/place/default duration, audit và thông báo cùng transaction; từ chối giữ bản công khai cũ. Duyệt không tự bật lại offer, thay quyền user hoặc sửa bất kỳ slot/booking/item nào. Request review lặp cùng quyết định/lý do/người duyệt trên bản còn mới nhất là no-op. Audit lỗi thì rollback cả giá; thông báo lỗi thì rollback cả review/publication.
 
@@ -335,11 +335,11 @@ Mã và phiên bản phải đúng bản mới nhất; giá thay đổi trước
 {"expectedToken":"<room.pricingToken-vua-doc>","nightlyPriceVnd":450000,"reason":"Cập nhật giá áp dụng cho yêu cầu mới"}
 ```
 
-Giá mới có hiệu lực cho danh mục công khai ngay, kể cả lúc bản sửa đang chờ duyệt. Phép đổi giá không sửa snapshot trong revision đã gửi, phương án, reservation set hoặc booking item. Duyệt nội dung cũng không khôi phục giá cũ. Token giá tách khỏi tham chiếu nội dung để hai thiết bị không ghi đè giá mới; dùng đúng token với cùng giá là no-op. Giá phòng là **một phòng/một đêm**, không nhân số khách. Số đêm và tổng tiền sẽ được backend tính theo ngày nhận/trả khi triển khai booking; API này chưa báo giá hay giữ phòng.
+Giá mới có hiệu lực cho danh mục công khai ngay, kể cả lúc bản sửa đang chờ duyệt. Phép đổi giá không sửa snapshot trong revision đã gửi, phương án, reservation set hoặc booking item. Duyệt nội dung cũng không khôi phục giá cũ. Token giá tách khỏi tham chiếu nội dung để hai thiết bị không ghi đè giá mới; dùng đúng token với cùng giá là no-op. Giá phòng là **một phòng/một đêm**, không nhân số khách. Số đêm và tổng tiền được AvailabilityService tính theo ngày nhận/trả trong module booking; API cập nhật giá này không tự giữ phòng.
 
 Đổi trạng thái dùng `{expectedState:{supplyStatus,visibility},supplyStatus,visibility,reason}`. AVAILABLE/PAUSED/RETIRED độc lập VISIBLE/HIDDEN; RETIRED không được mở lại. Hộ bị thu hồi duyệt vẫn đọc phòng/lịch sử, tạm ngừng hoặc ngừng hẳn và ẩn phòng, nhưng không tạo/sửa/gửi nội dung, đổi giá hoặc mở nhận đặt. Phòng archive vẫn đọc lịch sử nhưng không sửa. Ngừng cung cấp/ẩn không giải phóng hay hủy booking cũ.
 
-Khi còn hạng mục phòng chưa giải phóng, chưa kết thúc trong reservation set COMMITTED hoặc HELD còn hạn, việc đổi **điểm, sức chứa, giờ nhận/trả** không được gửi/duyệt (`ROOM_CONFIGURATION_LOCKED`, 409). Vẫn được sửa nội dung giới thiệu và điều kiện áp dụng cho giao dịch tương lai; cam kết cũ giữ snapshot riêng. Kiểm lại cam kết ở cả submit và approve; HELD hết hạn không chặn dù worker chưa đổi trạng thái. Truy vấn dùng locking read hiện hành, không dựa trên snapshot đọc trước khi lấy khóa. Quy tắc khóa: user ID tăng dần → session → hộ → phòng → revision → điểm → hạng mục/cam kết. Engine booking tương lai phải khóa hộ và các phòng theo ID tăng dần trước khi kiểm tra/tạo giữ chỗ hoặc cam kết.
+Khi còn hạng mục phòng chưa giải phóng, chưa kết thúc trong reservation set COMMITTED hoặc HELD còn hạn, việc đổi **điểm, sức chứa, giờ nhận/trả** không được gửi/duyệt (`ROOM_CONFIGURATION_LOCKED`, 409). Vẫn được sửa nội dung giới thiệu và điều kiện áp dụng cho giao dịch tương lai; cam kết cũ giữ snapshot riêng. Kiểm lại cam kết ở cả submit và approve; HELD hết hạn không chặn dù worker chưa đổi trạng thái. Truy vấn dùng locking read hiện hành, không dựa trên snapshot đọc trước khi lấy khóa. Quy tắc khóa: user ID tăng dần → session → hộ → phòng → revision → điểm → hạng mục/cam kết. Engine booking hiện tại khóa các user liên quan theo ID tăng dần rồi khóa hộ trước các phòng/hạng mục; khóa hộ tuần tự hóa mọi lần nhận cam kết cùng hộ.
 
 Public chỉ lấy pointer APPROVED của phòng, hộ và điểm; cả ba phải chưa archive, VISIBLE và đang cho phép cung cấp, chủ hộ ACTIVE/HOUSEHOLD, hộ APPROVED. Không lộ nháp, review note, tài khoản, token hoặc giá chụp trong lịch sử kiểm duyệt. Query hỗ trợ `page`, `pageSize`, `householdId`, `placeId`, `q`, `guests`, `minPriceVnd`, `maxPriceVnd`; `guests` kiểm `maxGuests >= guests`, khoảng giá bao gồm hai đầu. Từ khóa `%`, `_`, `!` được tìm theo ký tự thường, không biến thành wildcard SQL. Kết quả **không xác nhận còn phòng theo ngày**; chưa nhận ngày đến/ngày đi ở endpoint này.
 

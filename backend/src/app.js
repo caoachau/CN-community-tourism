@@ -14,6 +14,7 @@ import { createOwnedServiceRouter,createServiceReviewRouter,createPublicServiceR
 import { createOwnedRoomRouter,createRoomReviewRouter,createPublicRoomRouter } from './rooms/router.js';
 import { createContentRouter } from './content/router.js';
 import { createCalendarRouter, createPublicCalendarRouter } from './calendar/router.js';
+import { createBookingRouter } from './bookings/router.js';
 
 export function createApp({
   checkDatabase,
@@ -28,6 +29,7 @@ export function createApp({
   roomService,
   contentService,
   calendarService,
+  bookingService,
   trustProxy = 0,
 } = {}) {
   const app = express();
@@ -72,6 +74,7 @@ export function createApp({
     }));
   }
   if (contentService && authService) app.use('/api/v1', createContentRouter(contentService, authService));
+  if (bookingService && authService) app.use('/api/v1',createBookingRouter(bookingService,authService));
   if (calendarService) {
     app.use('/api/v1/public',createPublicCalendarRouter(calendarService));
     if(authService)app.use('/api/v1/households/me/calendar',createCalendarRouter(calendarService,authService));

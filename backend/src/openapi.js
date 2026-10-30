@@ -6,6 +6,7 @@ import { servicesOpenApi } from './services/openapi.js';
 import { roomsOpenApi } from './rooms/openapi.js';
 import { contentOpenApi } from './content/openapi.js';
 import { calendarOpenApi } from './calendar/openapi.js';
+import { bookingsOpenApi } from './bookings/openapi.js';
 
 const reference = (name) => ({ $ref: `#/components/schemas/${name}` });
 const requestIdHeader = {
@@ -31,8 +32,9 @@ const services = servicesOpenApi({ reference, jsonResponse, successSchema });
 const rooms = roomsOpenApi({ reference, jsonResponse, successSchema });
 const content = contentOpenApi({ reference, jsonResponse, successSchema });
 const calendar = calendarOpenApi({ reference, jsonResponse, successSchema });
+const bookings = bookingsOpenApi({ reference,jsonResponse,successSchema });
 const businessPaths = {};
-for (const module of [auth, households, catalog, services, rooms, content, calendar]) {
+for (const module of [auth, households, catalog, services, rooms, content, calendar, bookings]) {
   for (const [path, operations] of Object.entries(module.paths)) businessPaths[path] = { ...businessPaths[path], ...operations };
 }
 
@@ -42,7 +44,7 @@ export const openApiDocument = {
     title: 'Community Tourism API',
     version: '0.1.0',
     description: 'API nền cho nền tảng du lịch cộng đồng: health/readiness, xác thực JWT và mở/xét duyệt hồ sơ hộ dân. '
-      + 'Quản lý danh mục, phòng/dịch vụ, ảnh theo phiên bản, khung giờ, tài nguyên và lịch chặn; kiểm tra khả dụng công khai. '
+      + 'Quản lý danh mục, phòng/dịch vụ, ảnh, khung giờ, tài nguyên và lịch chặn; booking nhiều hạng mục, giữ chỗ/hết hạn, sổ thu/hoàn và review. '
       + 'Đăng ký tạo CUSTOMER; Admin duyệt hộ mới cấp HOUSEHOLD, kế thừa quyền CUSTOMER. API nghiệp vụ dùng /api/v1. '
       + 'Các mã lỗi dùng chung không có nghĩa những chức năng tương ứng đã được triển khai.',
   },
@@ -57,6 +59,7 @@ export const openApiDocument = {
     { name: 'Rooms', description: 'Household lodging, nightly pricing and moderated content versions' },
     { name: 'Content management', description: 'Versioned images and reversible archival of household profiles, rooms and services' },
     { name: 'Calendar', description: 'Slots, capacity, resource allocations, blocks and public availability; no reservations are created here' },
+    { name: 'Bookings', description: 'Atomic multi-item booking, holds/expiry, status transitions, immutable cash ledger and verified reviews' },
     { name: 'Public catalog', description: 'Active categories and approved, available locations; no account required' },
   ],
   paths: {
@@ -110,6 +113,7 @@ export const openApiDocument = {
       ...rooms.schemas,
       ...content.schemas,
       ...calendar.schemas,
+      ...bookings.schemas,
       ResponseMeta: {
         type: 'object',
         required: ['requestId'],

@@ -10,6 +10,7 @@ import { openApiDocument } from '../src/openapi.js';
 import { ERROR_DEFINITIONS } from '../src/shared/errors.js';
 import { createLogger } from '../src/shared/logger.js';
 import { validate } from '../src/shared/validation.js';
+import { bookingsOpenApi } from '../src/bookings/openapi.js';
 
 const logger = createLogger({ env: { LOG_LEVEL: 'silent' } });
 let server;
@@ -77,6 +78,7 @@ test('OpenAPI is valid with resolved references and documents implemented system
     ...[['slots','slotId'],['resources','resourceId'],['blocks','blockId']].flatMap(([path,key])=>[
       `/api/v1/households/me/calendar/${path}`,`/api/v1/households/me/calendar/${path}/{${key}}`]),
     '/api/v1/public/services/{serviceId}/slots','/api/v1/public/rooms/{roomId}/availability',
+    ...Object.keys(bookingsOpenApi({reference:()=>({}),jsonResponse:()=>({}),successSchema:()=>({})}).paths),
   ].sort());
   assert.deepEqual(document.paths['/api/v1/auth/me'].get.security, [{ BearerAuth: [] }]);
   assert.deepEqual(document.paths['/api/v1/admin/users/{userId}/status'].patch.security, [{ BearerAuth: [] }]);

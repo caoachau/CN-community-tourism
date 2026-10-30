@@ -15,6 +15,7 @@ import 'management.dart';
 import 'media.dart';
 import 'calendar.dart';
 import 'public_calendar.dart';
+import 'bookings.dart';
 
 part 'reference_widgets.dart';
 part 'discovery_pages.dart';
@@ -119,10 +120,14 @@ class _LiveShellState extends State<LiveShell> with WidgetsBindingObserver {
   }
 
   Future<void> select(int value) async {
-    if (value == 1 || value == 2 || value == 3) {
+    if (value == 2 && !widget.api.signedIn) {
+      await openAuthentication(context, widget.api);
+      if (!widget.api.signedIn) return;
+    }
+    if (value == 1 || value == 3) {
+      if (!mounted) return;
       await featureAlert(context, switch (value) {
         1 => MissingFeature.favorites,
-        2 => MissingFeature.booking,
         _ => MissingFeature.messages,
       });
       return;
@@ -147,6 +152,10 @@ class _LiveShellState extends State<LiveShell> with WidgetsBindingObserver {
       child: Padding(
         padding: EdgeInsets.only(top: kIsWeb ? 16 : 0),
         child: switch (tab) {
+          2 => BookingListPage(
+            key: ValueKey(widget.api.epoch),
+            api: widget.api,
+          ),
           4 => LiveAccount(api: widget.api, openHost: () => select(5)),
           5 => HouseholdDashboard(
             key: ValueKey(widget.api.epoch),
