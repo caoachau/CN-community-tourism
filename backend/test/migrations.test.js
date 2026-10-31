@@ -7,12 +7,12 @@ import { loadMigrations, parseMigration, quoteDatabase, migrationErrorCode } fro
 
 test('deployment manifest matches the complete compact ERD and canonical checksum', async () => {
   const plan = await loadMigrations();
-  assert.deepEqual(plan.migrations.map((migration) => [migration.version, migration.file, migration.statements.length]), [[1, '001_initial_schema.sql', 144], [2, '002_compact_v3.sql', 108], [3, '003_survey_schema.sql', 66]]);
+  assert.deepEqual(plan.migrations.map((migration) => [migration.version, migration.file, migration.statements.length]), [[1, '001_initial_schema.sql', 144], [2, '002_compact_v3.sql', 108], [3, '003_survey_schema.sql', 66], [4, '004_household_operations.sql', 3]]);
   assert.equal(plan.migrations[0].checksum, '0cb750b5489af3ce52c8b8293d309cc0170184eeef6d3a6366a30f5f5b100f3f');
   assert.equal(plan.migrations[1].checksum, 'a842313d298c45115320be95b3bef873989ce4b219047c8902a82691f22ced36');
   assert.equal(plan.expected.tables.length, 34);
-  assert.equal(plan.expected.foreignKeys.length, 112);
-  assert.equal(plan.expected.checks.length, 174);
+  assert.equal(plan.expected.foreignKeys.length, 114);
+  assert.equal(plan.expected.checks.length, 175);
 });
 
 test('survey parser permits reviewed evolution without allowing destructive or unrelated writes', () => {

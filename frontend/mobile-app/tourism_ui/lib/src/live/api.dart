@@ -52,6 +52,12 @@ const errorMessages = {
   'CALENDAR_COMMITMENT_CONFLICT': 'Thay đổi này ảnh hưởng đến cam kết đặt chỗ hoặc tài nguyên đang được sử dụng.',
   'RESOURCE_CODE_EXISTS': 'Hộ đã có tài nguyên với mã này.',
   'HOLD_EXPIRED': 'Yêu cầu đã hết hạn giữ chỗ. Vui lòng kiểm tra và đặt lại.',
+  'HOLD_WINDOW_TOO_SHORT': 'Không còn đủ 30 phút để hộ phản hồi trước hạn giữ chỗ. Vui lòng chọn lịch khác.',
+  'CANCELLATION_REQUEST_REQUIRED':
+      'Vui lòng dùng chức năng yêu cầu hủy và chờ hộ xác nhận.',
+  'CANCELLATION_PENDING':
+      'Đơn đang chờ xử lý yêu cầu hủy. Vui lòng tải lại để xử lý đúng yêu cầu.',
+  'SERVICE_ALREADY_STARTED': 'Đơn đã có phục vụ hoặc giao tài sản. Cần đối chiếu kết quả thực tế trước khi đóng đơn.',
   'HOLD_LIMIT': 'Bạn có tối đa 5 yêu cầu đang giữ chỗ. Hủy yêu cầu không cần thiết hoặc chờ hết hạn.',
   'QUOTE_CHANGED':
       'Giá hoặc điều kiện đã thay đổi. Hãy lấy báo giá mới và kiểm tra lại.',

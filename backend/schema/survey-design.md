@@ -2,6 +2,8 @@
 
 Thiết kế cho MySQL 8.4.11 / InnoDB, `mysql2/promise`, tiền VND nguyên và timestamp UTC. Hiển thị lịch theo `Asia/Ho_Chi_Minh`; phòng tính theo ngày nhận/trả và số đêm. **Đây là thiết kế/migration, chưa phải API nghiệp vụ hoàn chỉnh hoặc xác nhận đã triển khai Aiven.**
 
+**Triển khai bổ sung 31/10/2026:** migration `004_household_operations.sql` và runtime hủy/giữ chỗ đã được lập trình theo [Thiết kế hộ dân](../../Tai%20lieu%20he%20thong/THIET_KE_HO_DAN.md). BOOKING_CANCEL có base set FK, thời điểm/người/lý do đóng và unique generated key chỉ cho một yêu cầu OPEN/booking. Trạng thái booking vẫn PENDING/CONFIRMED khi chờ hủy, DTO có displayStatus. Migration 004 bổ sung tại chỗ, không chạy lại backfill 003 và không gia hạn hold cũ. Checksum 001–003 giữ nguyên; runner yêu cầu maintenance cho nâng cấp. Chưa chạy 004 lên DB vận hành; các số liệu 20/10 bên dưới là lịch sử kiểm chứng 003.
+
 ## 1. Phạm vi và ánh xạ
 
 Giữ **21 thực thể CDM**, triển khai bằng **34 bảng ứng dụng**, cộng `schema_migrations`. [survey-mapping.json](survey-mapping.json) là ánh xạ máy đọc được, có kiểm thử bao phủ mọi bảng. Giữ tên và ID của 30 bảng hiện tại; chỉ thêm:

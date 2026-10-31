@@ -100,7 +100,7 @@ class _PublicCatalogState extends State<PublicCatalog> {
             IconButton(
               tooltip: 'Thông báo',
               onPressed: () =>
-                  featureAlert(context, MissingFeature.notifications),
+                  _push(context, BookingNotificationsPage(api: widget.api)),
               style: IconButton.styleFrom(
                 backgroundColor: Colors.white,
                 side: const BorderSide(color: uiBorder),

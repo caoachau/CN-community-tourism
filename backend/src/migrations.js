@@ -124,10 +124,10 @@ export async function loadMigrations(directory = new URL('../migrations/', impor
     if (!match || Number(match[1]) !== migrations.length + 1) fail('INVALID_MIGRATION_SEQUENCE');
     const source = normalize(await readFile(new URL(file, directory), 'utf8'));
     const replacement = file === '002_compact_v3.sql';
-    const evolution = file === '003_survey_schema.sql';
+    const evolution = ['003_survey_schema.sql', '004_household_operations.sql'].includes(file);
     migrations.push({ version: Number(match[1]), file, checksum: digest(source),
       ...(replacement ? { mode: 'REPLACE_EMPTY' } : {}),
-      ...(evolution ? { mode: 'SURVEY_UPGRADE' } : {}),
+      ...(evolution ? { mode: file === '003_survey_schema.sql' ? 'SURVEY_UPGRADE' : 'ADDITIVE_UPGRADE' } : {}),
       statements: parseMigration(source, { jsonLiterals: replacement, evolution }) });
   }
   const checksum = digest(migrations.map(({ version, file, checksum }) => `${version}:${file}:${checksum}`).join('\n'));
@@ -306,7 +306,7 @@ export async function applyMigrations(connection, database, plan, { createDataba
   if (Number(result.acquired) !== 1) fail('MIGRATION_LOCK_UNAVAILABLE');
   try {
     const status = await migrationStatus(connection, database, plan);
-    if (!maintenanceConfirmed && plan.migrations.some((m) => m.mode === 'SURVEY_UPGRADE' && status.pending.includes(m.file))) fail('SURVEY_UPGRADE_REQUIRES_MAINTENANCE_WINDOW');
+    if (!maintenanceConfirmed && plan.migrations.some((m) => ['SURVEY_UPGRADE','ADDITIVE_UPGRADE'].includes(m.mode) && status.pending.includes(m.file))) fail('SURVEY_UPGRADE_REQUIRES_MAINTENANCE_WINDOW');
     if (!status.exists) {
       if (!createDatabase) fail('DATABASE_CREATION_REQUIRES_EXPLICIT_FLAG');
       await query(connection, `CREATE DATABASE ${quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);

@@ -9,7 +9,7 @@ export function createBookingRouter(service,authService){
   const router=Router();router.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
   router.get('/public/households/:householdId/reviews',validate({params:z.strictObject({householdId:id}),query:s.reviewList.omit({householdId:true})}),async(_req,res)=>
     sendSuccess(res,await service.reviews(null,{...res.locals.validated.query,householdId:res.locals.validated.params.householdId})));
-  router.use(['/bookings','/households/me/bookings','/households/me/financial-entries','/admin/bookings','/admin/financial-entries','/admin/reviews'],authenticate(authService));
+  router.use(['/bookings','/households/me/bookings','/households/me/financial-entries','/admin/bookings','/admin/financial-entries','/admin/reviews','/notifications'],authenticate(authService));
   const params=z.strictObject({bookingId:id});
   const customers=requireRoles('CUSTOMER','HOUSEHOLD'),hosts=requireRoles('HOUSEHOLD'),admins=requireRoles('ADMIN');
   router.post('/bookings/quote',customers,validate({body:s.cart}),async(_req,res)=>sendSuccess(res,await service.quote(res.locals.auth,res.locals.validated.body)));
@@ -25,6 +25,16 @@ export function createBookingRouter(service,authService){
     router.post(`${base}/:bookingId/${action}`,action==='cancel'?customers:hosts,validate({params,body:s.command}),async(_req,res)=>
       sendSuccess(res,await service.transition(res.locals.auth,res.locals.validated.params.bookingId,action,res.locals.validated.body,res.locals.requestId)));
   }
+  router.post('/households/me/bookings/:bookingId/cancel',hosts,validate({params,body:s.command}),async(_req,res)=>
+    sendSuccess(res,await service.transition(res.locals.auth,res.locals.validated.params.bookingId,'cancel',res.locals.validated.body,res.locals.requestId)));
+  router.post('/bookings/:bookingId/cancellation-requests',customers,validate({params,body:s.cancellation}),async(_req,res)=>
+    sendSuccess(res,await service.cancellation(res.locals.auth,res.locals.validated.params.bookingId,'request',null,res.locals.validated.body,res.locals.requestId),{status:201}));
+  for(const [base,action,guard] of [['/bookings','withdraw',customers],['/households/me/bookings','confirm',hosts]]){
+    router.post(`${base}/:bookingId/cancellation-requests/:requestId/${action}`,guard,validate({params:params.extend({requestId:id}),body:s.cancellation}),async(_req,res)=>
+      sendSuccess(res,await service.cancellation(res.locals.auth,res.locals.validated.params.bookingId,action,res.locals.validated.params.requestId,res.locals.validated.body,res.locals.requestId)));
+  }
+  router.get('/notifications',validate({query:s.notificationList}),async(_req,res)=>sendSuccess(res,await service.notifications(res.locals.auth,res.locals.validated.query)));
+  router.post('/notifications/:notificationId/read',validate({params:z.strictObject({notificationId:id})}),async(_req,res)=>sendSuccess(res,await service.readNotification(res.locals.auth,res.locals.validated.params.notificationId)));
   router.post('/bookings/:bookingId/review',customers,validate({params,body:s.review}),async(_req,res)=>sendSuccess(res,await service.review(res.locals.auth,res.locals.validated.params.bookingId,res.locals.validated.body,res.locals.requestId),{status:201}));
   router.post('/households/me/bookings/:bookingId/financial-entries',hosts,validate({params,body:s.entry}),async(_req,res)=>sendSuccess(res,await service.addEntry(res.locals.auth,res.locals.validated.params.bookingId,res.locals.validated.body,res.locals.requestId),{status:201}));
   router.post('/households/me/bookings/:bookingId/financial-entries/:entryId/reverse',hosts,validate({params:params.extend({entryId:id}),body:s.reversal}),async(_req,res)=>

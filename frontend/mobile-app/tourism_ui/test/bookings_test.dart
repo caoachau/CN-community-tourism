@@ -108,6 +108,152 @@ void largeScreen(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'customer cancellation retries the same command and shows a pending request instead of cancelled',
+    (tester) async {
+      largeScreen(tester);
+      final bodies = <Json>[];
+      var state = detail();
+      final api = await apiWith((r) async {
+        if (r.method == 'POST') {
+          expect(r.url.path, '/api/v1/bookings/7/cancellation-requests');
+          bodies.add(object(jsonDecode(r.body)));
+          if (bodies.length == 1) {
+            throw http.ClientException('connection lost after sending');
+          }
+          state = detail();
+          (state['booking'] as Json)['displayStatus'] = 'CANCEL_REQUESTED';
+          (state['booking'] as Json)['pendingCancellation'] = {
+            'id': '9',
+            'status': 'OPEN',
+            'reason': 'Thay đổi kế hoạch',
+            'createdAt': '2035-01-01T00:00:00Z',
+          };
+          state['allowedActions'] = ['withdrawCancellation'];
+        }
+        return ok(state);
+      });
+      addTearDown(api.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BookingDetailPage(api: api, id: '7'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Yêu cầu hủy đơn');
+      await tester.enterText(find.byType(TextField), 'Thay đổi kế hoạch');
+      await tapText(tester, 'Xác nhận');
+      expect(bodies.length, 1);
+      await tapText(tester, 'Thử lại thao tác hủy');
+      expect(bodies.length, 2);
+      expect(bodies[1], bodies[0]);
+      expect(find.text('Chờ xử lý hủy'), findsOneWidget);
+      expect(find.text('Rút yêu cầu hủy'), findsOneWidget);
+      expect(find.text('Đã hủy'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'host sees cancellation acknowledgment and cannot confirm or complete the underlying booking',
+    (tester) async {
+      largeScreen(tester);
+      final state = detail(status: 'PENDING');
+      (state['booking'] as Json)['displayStatus'] = 'CANCEL_REQUESTED';
+      (state['booking'] as Json)['pendingCancellation'] = {
+        'id': '9',
+        'status': 'OPEN',
+        'reason': 'Khách đổi lịch',
+        'createdAt': '2035-01-01T00:00:00Z',
+      };
+      state['allowedActions'] = ['confirmCancellation'];
+      final api = await apiWith((_) async => ok(state), role: 'HOUSEHOLD');
+      addTearDown(api.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BookingDetailPage(api: api, id: '7', host: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Xác nhận hủy theo yêu cầu khách'), findsOneWidget);
+      expect(find.text('Xác nhận'), findsNothing);
+      expect(find.text('Từ chối'), findsNothing);
+      expect(find.text('Hoàn thành phục vụ'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'quote that lacks the minimum response time cannot be submitted',
+    (tester) async {
+      largeScreen(tester);
+      var holds = 0;
+      final api = await apiWith((r) async {
+        if (r.url.path.endsWith('/bookings')) holds++;
+        return ok({
+          'quote': {
+            ...quote,
+            'canHold': false,
+            'holdExpiresAt': '2035-11-30T00:00:00Z',
+          },
+        });
+      });
+      addTearDown(api.dispose);
+      api.addBookingItem('2', 'Phòng', line);
+      await tester.pumpWidget(MaterialApp(home: BookingCheckoutPage(api: api)));
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Kiểm tra và lấy báo giá');
+      await tapText(
+        tester,
+        'Tôi đã kiểm tra hạng mục, thời gian, giá và điều kiện phục vụ.',
+      );
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Gửi yêu cầu giữ chỗ'),
+      );
+      expect(button.onPressed, isNull);
+      expect(holds, 0);
+    },
+  );
+  testWidgets(
+    'notifications navigate to the booking audience and disappear on session change',
+    (tester) async {
+      largeScreen(tester);
+      final api = await apiWith((r) async {
+        if (r.url.path.endsWith('/notifications')) {
+          return ok({
+            'items': [
+              {
+                'id': '1',
+                'title': 'Khách đề nghị hủy booking',
+                'body': 'Đơn vẫn giữ chỗ',
+                'createdAt': '2035-01-01T00:00:00Z',
+                'readAt': null,
+                'navigation': {
+                  'screen': 'booking',
+                  'bookingId': '7',
+                  'audience': 'host',
+                },
+              },
+            ],
+            'total': 1,
+            'unreadCount': 1,
+          });
+        }
+        if (r.url.path.endsWith('/read')) return ok({});
+        expect(r.url.path, '/api/v1/households/me/bookings/7');
+        return ok(detail());
+      }, role: 'HOUSEHOLD');
+      addTearDown(api.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: BookingNotificationsPage(api: api)),
+      );
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Khách đề nghị hủy booking');
+      expect(find.text('BK-TEST'), findsOneWidget);
+      await api.clearSession();
+      await tester.pumpAndSettle();
+      expect(find.text('BK-TEST'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   test('cart prevents mixing households, replaces a room selection and clears with the session', () async {
     final api = await apiWith((_) async => ok({}));
     addTearDown(api.dispose);

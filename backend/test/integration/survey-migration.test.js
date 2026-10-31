@@ -74,9 +74,9 @@ test('empty installation upgrades to 34 application tables plus history without 
   const name = await baseline();
   const result = await applyMigrations(worker, name, plan, options);
   assert.equal(result.verification.tableCount, 35);
-  assert.equal(result.verification.foreignKeys, 112);
-  assert.equal(result.verification.enforcedChecks, 175);
-  assert.deepEqual(result.history.map((r) => r.status), ['APPLIED','APPLIED','APPLIED']);
+  assert.equal(result.verification.foreignKeys, 114);
+  assert.equal(result.verification.enforcedChecks, 176);
+  assert.deepEqual(result.history.map((r) => r.status), ['APPLIED','APPLIED','APPLIED','APPLIED']);
   for (const t of plan.expected.tables) {
     const [[r]] = await worker.query(`SELECT COUNT(*) n FROM ${t.name}`); assert.equal(Number(r.n), 0);
   }

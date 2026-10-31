@@ -6,6 +6,7 @@ import SwaggerParser from '@apidevtools/swagger-parser';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import {createTestDatabase} from '../support/mysql.js';
+import {insert} from '../support/fixtures.js';
 import {testDatabaseOptions} from '../support/config.js';
 import {databaseAccess} from '../../src/database.js';
 import {authOptions} from '../../src/config/auth.js';
@@ -42,7 +43,7 @@ async function request(path,{session=customer,method='GET',body,query}={}){
   const target=new URL(`${url}/api/v1${path}`);for(const [key,value]of Object.entries(query??{}))target.searchParams.set(key,value);
   const response=await fetch(target,{method,headers:{...(session?{Authorization:`Bearer ${session.accessToken}`} : {}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
   const payload=await response.json();
-  const key=`/api/v1${path.replace(/\/bookings\/\d+/g,'/bookings/{bookingId}').replace(/\/financial-entries\/\d+/g,'/financial-entries/{entryId}').replace(/\/reviews\/\d+/g,'/reviews/{reviewId}').replace(/\/households\/\d+/g,'/households/{householdId}')}`;
+  const key=`/api/v1${path.replace(/\/cancellation-requests\/\d+/g,'/cancellation-requests/{requestId}').replace(/\/notifications\/\d+/g,'/notifications/{notificationId}').replace(/\/bookings\/\d+/g,'/bookings/{bookingId}').replace(/\/financial-entries\/\d+/g,'/financial-entries/{entryId}').replace(/\/reviews\/\d+/g,'/reviews/{reviewId}').replace(/\/households\/\d+/g,'/households/{householdId}')}`;
   const operation=contract.paths[key]?.[method.toLowerCase()];assert.ok(operation,`Undocumented ${method} ${key}`);
   const validator=ajv.compile((operation.responses[response.status]??operation.responses.default).content['application/json'].schema);
   assert.equal(validator(payload),true,JSON.stringify(validator.errors));assert.equal(response.headers.get('cache-control'),'no-store');
@@ -146,14 +147,15 @@ test('price changes require a new quote but never rewrite held snapshots',async(
   const d=await held(cart);await pool.execute('UPDATE rooms SET nightly_price_vnd=400000 WHERE id=?',[a.roomIds[0]]);
   assert.equal((await confirm(d)).items[0].unitPriceVnd,450000);
 });
-test('rejection and customer cancellation release the whole basket and enforce stale/state rules',async()=>{
+test('rejection and owner cancellation release the basket; legacy customer cancellation is blocked',async()=>{
   let d=await held(roomCart('2035-12-08'));
   let r=await request(`/households/me/bookings/${d.booking.id}/reject`,{session:a.owner,method:'POST',body:command(d)});assert.equal(r.data.booking.status,'REJECTED');
-  d=await held(roomCart('2035-12-08'));d=await confirm(d);
-  assert.equal((await request(`/bookings/${d.booking.id}/cancel`,{method:'POST',body:{...command(d),expectedToken:'a'.repeat(64)}})).code,'STALE_VERSION');
-  r=await request(`/bookings/${d.booking.id}/cancel`,{method:'POST',body:command(d)});assert.equal(r.data.booking.status,'CANCELLED');
+  d=await confirm(await held(roomCart('2035-12-08')));
+  assert.equal((await request(`/bookings/${d.booking.id}/cancel`,{method:'POST',body:command(d)})).code,'CANCELLATION_REQUEST_REQUIRED');
+  r=await request(`/households/me/bookings/${d.booking.id}/cancel`,{session:a.owner,method:'POST',body:command(d)});assert.equal(r.data.booking.status,'CANCELLED');
   assert.equal((await request('/bookings/quote',{session:other,method:'POST',body:roomCart('2035-12-08')})).status,200);
 });
+
 test('cash ledger is append only, idempotent, caps receipts/refunds and distinguishes agreements',async()=>{
   let d=await confirm(await held(roomCart('2035-12-09')));
   const body={expectedToken:d.booking.token,idempotencyKey:randomUUID(),occurredAt:atNow(),note:'Nhận tiền mặt',type:'RECEIPT',amountVnd:200000,paymentMethod:'CASH',receiptPurpose:'DEPOSIT'};
@@ -230,9 +232,9 @@ test('shared-once resources are charged once per session while their people limi
 });
 test('racing confirmation and cancellation serialize with one successful transition',async()=>{
   const d=await held(roomCart('2035-12-18')),body=command(d);
-  const results=await Promise.all([request(`/households/me/bookings/${d.booking.id}/confirm`,{session:a.owner,method:'POST',body}),request(`/bookings/${d.booking.id}/cancel`,{method:'POST',body})]);
-  assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
-  const final=(await request(`/bookings/${d.booking.id}`)).data;assert.equal(final.history.length,2);assert.ok(['CONFIRMED','CANCELLED'].includes(final.booking.status));
+  const results=await Promise.all([request(`/households/me/bookings/${d.booking.id}/confirm`,{session:a.owner,method:'POST',body}),request(`/bookings/${d.booking.id}/cancellation-requests`,{method:'POST',body:{...body,idempotencyKey:randomUUID()}})]);
+  assert.equal(results.filter(r=>[200,201].includes(r.status)).length,1,JSON.stringify(results));assert.equal(results.filter(r=>r.status===409).length,1);
+  const final=(await request(`/bookings/${d.booking.id}`)).data;assert.ok(['CONFIRMED','CANCEL_REQUESTED'].includes(final.booking.displayStatus));
 });
 test('refund adjustments preserve settled refunds and enable correction without deleting obligations',async()=>{
   let d=await confirm(await held(roomCart('2035-12-19')));
@@ -243,22 +245,172 @@ test('refund adjustments preserve settled refunds and enable correction without 
   assert.equal((await entry(d,{type:'REFUND_ADJUSTMENT',amountVnd:-50000,agreementId})).code,'FINANCIAL_CONFLICT');
   r=await entry(d,{type:'REFUND_ADJUSTMENT',amountVnd:-40000,agreementId});assert.equal(r.status,201,r.code);assert.equal(r.data.booking.summary.refundDueVnd,0);assert.equal(r.data.booking.summary.refundAgreedVnd,60000);
 });
-test('the active hold limit is per customer and cancellation immediately frees a hold allowance',async()=>{
+test('the active hold limit is per customer and only confirmed cancellation frees an allowance',async()=>{
   const session=await account(),holds=[];
   for(let index=20;index<25;index++)holds.push(await held(roomCart(`2035-12-${index}`),{session}));
   const q=await booking.quote(await actor(session),roomCart('2035-12-25'));
   const body={...roomCart('2035-12-25'),contact:{name:'Khách',phone:'0901234567'},expectedQuoteToken:q.quote.token,idempotencyKey:randomUUID()};
   assert.equal((await request('/bookings',{session,method:'POST',body})).code,'HOLD_LIMIT');
-  await request(`/bookings/${holds[0].booking.id}/cancel`,{session,method:'POST',body:command(holds[0])});
+  const pending=(await request(`/bookings/${holds[0].booking.id}/cancellation-requests`,{session,method:'POST',body:{...command(holds[0]),idempotencyKey:randomUUID()}})).data;
+  assert.equal((await request('/bookings',{session,method:'POST',body})).code,'HOLD_LIMIT');
+  await request(`/households/me/bookings/${pending.booking.id}/cancellation-requests/${pending.booking.pendingCancellation.id}/confirm`,{session:a.owner,method:'POST',body:{...command(pending),idempotencyKey:randomUUID()}});
   assert.equal((await request('/bookings',{session,method:'POST',body})).status,201);
-  for(const d of holds.slice(1))await request(`/bookings/${d.booking.id}/cancel`,{session,method:'POST',body:command(d)});
+  for(const d of holds.slice(1))await request(`/households/me/bookings/${d.booking.id}/cancel`,{session:a.owner,method:'POST',body:command(d)});
 });
 test('live account block and household suspension prohibit acquisition without altering old snapshots',async()=>{
   const cart=roomCart('2035-12-14'),q=await booking.quote(await actor(customer),cart);
   await pool.execute("UPDATE households SET visibility='HIDDEN' WHERE id=?",[a.householdId]);
   assert.equal((await request('/bookings/quote',{method:'POST',body:cart})).code,'HOUSEHOLD_NOT_APPROVED');
   await pool.execute("UPDATE households SET visibility='VISIBLE' WHERE id=?",[a.householdId]);
-  await pool.execute("UPDATE users SET status='BLOCKED',disabled_at=UTC_TIMESTAMP(6) WHERE id=?",[other.user.id]);
-  assert.equal((await request('/bookings/quote',{session:other,method:'POST',body:cart})).code,'ACCOUNT_BLOCKED');
+  const blocked=await account();
+  await pool.execute("UPDATE users SET status='BLOCKED',disabled_at=UTC_TIMESTAMP(6) WHERE id=?",[blocked.user.id]);
+  assert.equal((await request('/bookings/quote',{session:blocked,method:'POST',body:cart})).code,'ACCOUNT_BLOCKED');
   assert.ok(q.quote.totalVnd>0);
+});
+
+const cancelCommand=d=>({...command(d),idempotencyKey:randomUUID()});
+async function requestCancellation(d,session=customer){
+  const r=await request(`/bookings/${d.booking.id}/cancellation-requests`,{session,method:'POST',body:cancelCommand(d)});
+  assert.equal(r.status,201,r.code);return r.data;
+}
+const cancellationPath=(d,action)=>`${action==='confirm'?'/households/me':''}/bookings/${d.booking.id}/cancellation-requests/${d.booking.pendingCancellation.id}/${action}`;
+const clockService=at=>createBookingService({repository:{transaction:work=>repository.transaction(tx=>work({...tx,databaseNow:async()=>({now_at:new Date(at)})}))}});
+
+test('confirmed cancellation keeps capacity and cash until host acknowledgment; duplicates are replayed',async()=>{
+  const cart=roomCart('2036-02-01');let d=await confirm(await held(cart));
+  d=(await entry(d,{type:'RECEIPT',amountVnd:100000,paymentMethod:'CASH',receiptPurpose:'DEPOSIT'})).data;
+  const original=d,body=cancelCommand(d),path=`/bookings/${d.booking.id}/cancellation-requests`;
+  const replies=await Promise.all([1,2].map(()=>request(path,{method:'POST',body})));
+  assert.ok(replies.every(r=>r.status===201),JSON.stringify(replies));d=replies[0].data;
+  assert.equal(d.booking.status,'CONFIRMED');assert.equal(d.booking.displayStatus,'CANCEL_REQUESTED');
+  assert.equal(d.cancellations.length,1);assert.equal(d.booking.summary.receivedVnd,100000);
+  assert.notEqual(d.booking.token,original.booking.token);
+  assert.equal((await request(path,{method:'POST',body:{...body,reason:'Different payload'}})).code,'IDEMPOTENCY_CONFLICT');
+  assert.equal((await request('/bookings/quote',{session:other,method:'POST',body:cart})).code,'AVAILABILITY_CONFLICT');
+  const [[set]]=await pool.execute('SELECT status,released_at FROM reservation_sets WHERE booking_id=?',[d.booking.id]);assert.equal(set.status,'COMMITTED');assert.equal(set.released_at,null);
+  const list=(await request('/admin/bookings',{session:admin,query:{status:'CANCEL_REQUESTED'}})).data;
+  assert.ok(list.items.some(b=>b.id===d.booking.id));assert.ok(list.items.every(b=>b.displayStatus==='CANCEL_REQUESTED'));
+  assert.equal((await request(`/households/me/bookings/${d.booking.id}/complete`,{session:a.owner,method:'POST',body:command(d)})).code,'CANCELLATION_PENDING');
+  const confirmPath=cancellationPath(d,'confirm'),confirmBody=cancelCommand(d);
+  const result=await request(confirmPath,{session:a.owner,method:'POST',body:confirmBody});assert.equal(result.status,200,result.code);d=result.data;
+  assert.equal(d.booking.status,'CANCELLED');assert.equal(d.booking.pendingCancellation,null);assert.equal(d.cancellations[0].status,'ACCEPTED');
+  assert.equal(d.booking.summary.receivedVnd,100000);assert.equal(d.booking.summary.refundedVnd,0);assert.equal(d.entries.length,1);
+  assert.equal((await request(confirmPath,{session:a.owner,method:'POST',body:confirmBody})).data.replayed,true);
+  assert.equal((await request('/bookings/quote',{session:other,method:'POST',body:cart})).status,200);
+  const [[messages]]=await pool.execute("SELECT COUNT(*) total FROM notifications WHERE event_key IN (?,?)",[`cancel:${d.cancellations[0].id}:request`,`cancel:${d.cancellations[0].id}:confirm`]);assert.equal(Number(messages.total),4);
+  const agreement=(await entry(d,{type:'REFUND_AGREEMENT',amountVnd:100000})).data;
+  const refund=await entry(agreement,{type:'REFUND',amountVnd:100000,paymentMethod:'CASH',agreementId:agreement.entry.id});assert.equal(refund.status,201,refund.code);
+});
+
+test('withdrawal keeps the original hold deadline and races safely with host acknowledgment',async()=>{
+  let d=await held(roomCart('2036-02-02'));const deadline=d.booking.holdExpiresAt;
+  d=await requestCancellation(d);
+  for(const action of ['confirm','reject','cancel'])assert.equal((await request(`/households/me/bookings/${d.booking.id}/${action}`,{session:a.owner,method:'POST',body:command(d)})).code,'CANCELLATION_PENDING');
+  const withdraw=cancellationPath(d,'withdraw'),body=cancelCommand(d);
+  let r=await request(withdraw,{method:'POST',body});assert.equal(r.status,200,r.code);d=r.data;
+  assert.equal(d.booking.status,'PENDING');assert.equal(d.booking.displayStatus,'PENDING');assert.equal(d.booking.holdExpiresAt,deadline);assert.equal(d.cancellations[0].status,'WITHDRAWN');
+  assert.equal((await request(withdraw,{method:'POST',body})).data.replayed,true);
+  d=await requestCancellation(d);
+  const results=await Promise.all([
+    request(cancellationPath(d,'withdraw'),{method:'POST',body:cancelCommand(d)}),
+    request(cancellationPath(d,'confirm'),{session:a.owner,method:'POST',body:cancelCommand(d)}),
+  ]);
+  assert.deepEqual(results.map(r=>r.status).sort(),[200,409],JSON.stringify(results));
+  const final=(await request(`/bookings/${d.booking.id}`)).data;
+  if(final.booking.status==='PENDING')await request(`/households/me/bookings/${d.booking.id}/cancel`,{session:a.owner,method:'POST',body:command(final)});
+});
+
+test('pending cancellation expires and closes atomically at the exact deadline',async()=>{
+  let d=await requestCancellation(await held(roomCart('2036-02-03')));
+  const deadline=d.booking.holdExpiresAt,requestId=d.booking.pendingCancellation.id;
+  await assert.rejects(clockService(deadline).cancellation(await actor(a.owner),d.booking.id,'confirm',requestId,cancelCommand(d),audit()),{code:'HOLD_EXPIRED'});
+  d=(await request(`/bookings/${d.booking.id}`)).data;
+  assert.equal(d.booking.status,'EXPIRED');assert.equal(d.cancellations[0].status,'CLOSED');assert.equal(d.cancellations[0].resolutionCode,'HOLD_EXPIRED');
+  assert.equal(d.history.filter(h=>h.to==='EXPIRED').length,1);
+});
+
+test('confirmed pending cancellation survives old hold deadline and allows late acknowledgment before any actual service',async()=>{
+  let d=await requestCancellation(await confirm(await held(roomCart('2036-02-04'))));
+  await pool.execute('UPDATE bookings SET hold_expires_at=DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 1 SECOND) WHERE id=?',[d.booking.id]);
+  await booking.expireHolds();d=(await request(`/bookings/${d.booking.id}`)).data;assert.equal(d.booking.displayStatus,'CANCEL_REQUESTED');
+  const late=clockService('2036-02-06T12:00:00Z');
+  const result=await late.cancellation(await actor(a.owner),d.booking.id,'confirm',d.booking.pendingCancellation.id,cancelCommand(d),audit());assert.equal(result.booking.status,'CANCELLED');
+  assert.equal(result.booking.closedAt,'2036-02-06T12:00:00.000Z');
+});
+
+test('actual service prevents blanket cancellation and unauthorized callers cannot process a request',async()=>{
+  let d=await requestCancellation(await confirm(await held(roomCart('2036-02-05'))));
+  for(const session of [other,b.owner,admin])assert.equal((await request(cancellationPath(d,'confirm'),{session,method:'POST',body:cancelCommand(d)})).code,'FORBIDDEN');
+  await pool.execute('UPDATE booking_items SET actual_participant_count=1 WHERE id=?',[d.items[0].id]);
+  assert.equal((await request(cancellationPath(d,'confirm'),{session:a.owner,method:'POST',body:cancelCommand(d)})).code,'SERVICE_ALREADY_STARTED');
+  assert.equal((await request(`/bookings/${d.booking.id}`)).data.booking.displayStatus,'CANCEL_REQUESTED');
+});
+
+test('audit, notification and idempotency persistence failures roll back cancellation including release',async()=>{
+  let d=await confirm(await held(roomCart('2036-02-06')));
+  for(const hook of ['event','notifyBooking','saveIdempotency']){
+    const failing=createBookingService({repository:{transaction:work=>repository.transaction(tx=>work({...tx,[hook]:async()=>{throw new Error('injected rollback');}}))}});
+    await assert.rejects(failing.cancellation(await actor(customer),d.booking.id,'request',null,cancelCommand(d),audit()),/injected rollback/);
+    assert.equal((await request(`/bookings/${d.booking.id}`)).data.cancellations.length,0);
+  }
+  d=await requestCancellation(d);
+  const failing=createBookingService({repository:{transaction:work=>repository.transaction(tx=>work({...tx,notifyBooking:async()=>{throw new Error('injected rollback');}}))}});
+  await assert.rejects(failing.cancellation(await actor(a.owner),d.booking.id,'confirm',d.booking.pendingCancellation.id,cancelCommand(d),audit()),/injected rollback/);
+  const result=(await request(`/bookings/${d.booking.id}`)).data;assert.equal(result.booking.status,'CONFIRMED');assert.equal(result.booking.pendingCancellation.id,d.booking.pendingCancellation.id);
+  const [[set]]=await pool.execute('SELECT status FROM reservation_sets WHERE booking_id=?',[d.booking.id]);assert.equal(set.status,'COMMITTED');
+});
+
+test('hold policy is enforced by the server at 30-minute boundary and retries never extend it',async()=>{
+  const cart=roomCart('2037-01-01'),at='2037-01-01T04:30:00Z',clock=clockService(at),auth=await actor(customer),q=await clock.quote(auth,cart);
+  assert.equal(q.quote.canHold,true);assert.equal(q.quote.holdExpiresAt,'2037-01-01T05:00:00.000Z');
+  const input={...cart,contact:{name:'Khách gần giờ',phone:'0901234567'},expectedQuoteToken:q.quote.token,idempotencyKey:randomUUID()};
+  await assert.rejects(clockService('2037-01-01T04:30:01Z').hold(auth,input,audit()),{code:'HOLD_WINDOW_TOO_SHORT'});
+  const d=await clock.hold(auth,input,audit());assert.equal(d.booking.holdExpiresAt,q.quote.holdExpiresAt);
+  const replay=await clockService('2037-01-01T04:45:00Z').hold(auth,input,audit());assert.equal(replay.booking.holdExpiresAt,d.booking.holdExpiresAt);assert.equal(replay.replayed,true);
+  await assert.rejects(clockService(d.booking.holdExpiresAt).transition(await actor(a.owner),d.booking.id,'confirm',command(d),audit()),{code:'HOLD_EXPIRED'});
+});
+
+test('notifications are scoped, paginated, readable once and cannot be read across accounts',async()=>{
+  const result=await request('/notifications',{session:customer,query:{unreadOnly:'true',pageSize:5}});assert.equal(result.status,200,result.code);assert.ok(result.data.items.length>0);assert.ok(result.data.unreadCount>=result.data.items.length);
+  const id=result.data.items[0].id;
+  assert.equal((await request(`/notifications/${id}/read`,{session:other,method:'POST'})).code,'NOT_FOUND');
+  const first=await request(`/notifications/${id}/read`,{method:'POST'}),second=await request(`/notifications/${id}/read`,{method:'POST'});assert.equal(first.status,200,first.code);assert.equal(first.data.notification.readAt,second.data.notification.readAt);
+  assert.equal((await request('/notifications',{session:null})).status,401);
+});
+
+test('cancelling one shared booking preserves the other booking and the shared resource assignment',async()=>{
+  const resource=(await calendar.createResource(a.auth,{code:`CANCEL_SHARED_${++sequence}`,name:'Hướng dẫn chung',resourceType:'SINGLE',totalQuantity:1,maxPeoplePerUnit:4},audit())).resource;
+  const s=await slot({personCapacity:4,assignments:[{resourceId:resource.id,quantity:1,allocationMode:'SESSION_SHARED',rules:a.offers.map(o=>({offerId:o.id,usageBasis:'SHARED_ONCE',unitsRequired:1,maxPeoplePerUnit:4}))}]});
+  let d=await confirm(await held(serviceCart(s,{participants:2}))),second=await confirm(await held(serviceCart(s,{participants:2}),{session:other}));
+  d=await requestCancellation(d);
+  assert.equal((await request('/bookings/quote',{method:'POST',body:serviceCart(s,{participants:1})})).code,'AVAILABILITY_CONFLICT');
+  const r=await request(cancellationPath(d,'confirm'),{session:a.owner,method:'POST',body:cancelCommand(d)});assert.equal(r.status,200,r.code);
+  const otherBooking=(await request(`/bookings/${second.booking.id}`,{session:other})).data;assert.equal(otherBooking.booking.status,'CONFIRMED');
+  assert.equal((await request('/bookings/quote',{method:'POST',body:serviceCart(s,{participants:2})})).status,200);
+  assert.equal((await request('/bookings/quote',{method:'POST',body:serviceCart(s,{participants:3})})).code,'AVAILABILITY_CONFLICT');
+});
+
+test('requesting cancellation closes pending rescheduling and only releases its supplemental hold',async()=>{
+  let d=await confirm(await held(roomCart('2036-03-01')));
+  const [[current]]=await pool.execute('SELECT current_reservation_set_id FROM bookings WHERE id=?',[d.booking.id]);
+  const change=await insert(pool,'schedule_requests',{household_id:a.householdId,customer_user_id:customer.user.id,request_code:`CH-${randomUUID()}`,request_kind:'BOOKING_CHANGE',booking_id:d.booking.id,created_by:customer.user.id,message:'Xin đổi lịch',preferences:{},status:'PROPOSED'});
+  const proposal=await insert(pool,'booking_proposals',{household_id:a.householdId,request_id:change,booking_id:d.booking.id,version:1,created_by:a.owner.user.id,status:'SENT',sent_at:atNow().slice(0,19).replace('T',' '),expires_at:new Date(Date.now()+3600000).toISOString().slice(0,19).replace('T',' '),total_vnd:400000,terms_snapshot:{}});
+  const set=await insert(pool,'reservation_sets',{household_id:a.householdId,booking_id:d.booking.id,proposal_id:proposal,status:'HELD',purpose:'RESCHEDULE',base_set_id:current.current_reservation_set_id,version:2,first_starts_at:'2036-03-03 07:00:00',last_ends_at:'2036-03-04 05:00:00',hold_started_at:atNow().slice(0,19).replace('T',' '),expires_at:new Date(Date.now()+3600000).toISOString().slice(0,19).replace('T',' '),total_vnd:400000,terms_snapshot:{}});
+  await insert(pool,'booking_items',{household_id:a.householdId,reservation_set_id:set,kind:'ROOM',room_id:a.roomIds[0],participant_count:2,quantity:1,pricing_type:'PER_NIGHT',is_exclusive:1,check_in_date:'2036-03-03',check_out_date:'2036-03-04',starts_at:'2036-03-03 07:00:00',ends_at:'2036-03-04 05:00:00',unit_price_vnd:400000,base_amount_vnd:400000,snapshot:{title:'Alternative'}});
+  d=await requestCancellation(d);
+  const [sets]=await pool.execute('SELECT id,status FROM reservation_sets WHERE booking_id=? ORDER BY id',[d.booking.id]);assert.deepEqual(sets.map(s=>s.status),['COMMITTED','RELEASED']);
+  const [[closed]]=await pool.execute('SELECT status,resolution_code FROM schedule_requests WHERE id=?',[change]);assert.equal(closed.status,'CLOSED');assert.equal(closed.resolution_code,'CANCELLATION_REQUESTED');
+  const [[proposed]]=await pool.execute('SELECT status FROM booking_proposals WHERE id=?',[proposal]);assert.equal(proposed.status,'WITHDRAWN');
+  assert.equal((await request('/bookings/quote',{method:'POST',body:roomCart('2036-03-03')})).status,200);
+  assert.equal((await request('/bookings/quote',{method:'POST',body:roomCart('2036-03-01')})).code,'AVAILABILITY_CONFLICT');
+});
+
+test('an outstanding asset handover prevents cancellation even without a recorded outcome',async()=>{
+  const resource=(await calendar.createResource(a.auth,{code:`CANCEL_ASSET_${++sequence}`,name:'Xe của khách',resourceType:'POOL',totalQuantity:2,maxPeoplePerUnit:2},audit())).resource;
+  const s=await slot({personCapacity:4,assignments:[{resourceId:resource.id,quantity:2,allocationMode:'PER_BOOKING_QUOTA',rules:a.offers.map(o=>({offerId:o.id,usageBasis:'FIXED',unitsRequired:1,maxPeoplePerUnit:2}))}]});
+  let d=await requestCancellation(await confirm(await held(serviceCart(s,{participants:2}))));
+  const [[usage]]=await pool.execute('SELECT id FROM item_resource_usages WHERE item_id=?',[d.items[0].id]);
+  await insert(pool,'resource_handovers',{household_id:a.householdId,usage_id:usage.id,event_kind:'ISSUE',quantity:1,condition_note:'Xe đã giao',occurred_at:atNow().slice(0,19).replace('T',' '),recorded_by:a.owner.user.id,operation_key:randomUUID()});
+  assert.equal((await request(cancellationPath(d,'confirm'),{session:a.owner,method:'POST',body:cancelCommand(d)})).code,'SERVICE_ALREADY_STARTED');
+  d=(await request(`/bookings/${d.booking.id}`)).data;assert.ok(!d.allowedActions.includes('confirmCancellation'));assert.equal(d.booking.displayStatus,'CANCEL_REQUESTED');
 });

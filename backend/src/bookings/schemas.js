@@ -26,7 +26,10 @@ export const entry=z.strictObject({expectedToken:token,idempotencyKey:key,type:z
 export const reversal=z.strictObject({expectedToken:token,idempotencyKey:key,note:reason,occurredAt:z.iso.datetime({offset:true})});
 export const review=z.strictObject({rating:z.number().int().min(1).max(5),comment:z.string().trim().min(1).max(4000)});
 export const moderate=command.extend({hidden:z.boolean()});
-export const list=paginationSchema.extend({status:z.enum(statuses).optional(),householdId:id.optional()});
+export const list=paginationSchema.extend({status:z.enum([...statuses,'CANCEL_REQUESTED']).optional(),householdId:id.optional(),from:z.iso.datetime({offset:true}).optional(),to:z.iso.datetime({offset:true}).optional(),source:z.enum(['ONLINE','OFFLINE','CUSTOM_PROPOSAL']).optional()}).refine(v=>(!v.from&&!v.to)||(!!v.from&&!!v.to&&Date.parse(v.to)>Date.parse(v.from)&&Date.parse(v.to)-Date.parse(v.from)<=93*86400000));
 export const ledgerList=paginationSchema.extend({householdId:id.optional(),bookingId:id.optional()});
 export const reviewList=paginationSchema.extend({householdId:id.optional()});
 export function query(schema,input){return schema.parse({...input,...Object.fromEntries(['page','pageSize'].filter(k=>typeof input?.[k]==='number').map(k=>[k,String(input[k])]))});}
+
+export const cancellation=command.extend({idempotencyKey:key});
+export const notificationList=paginationSchema.extend({unreadOnly:z.enum(['true','false']).default('false')});

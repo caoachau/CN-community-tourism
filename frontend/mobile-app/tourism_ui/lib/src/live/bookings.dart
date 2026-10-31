@@ -10,6 +10,7 @@ import 'calendar.dart';
 
 const bookingStates = {
   'PENDING': 'Chờ hộ xác nhận',
+  'CANCEL_REQUESTED': 'Chờ xử lý hủy',
   'CONFIRMED': 'Đã xác nhận',
   'REJECTED': 'Hộ từ chối',
   'EXPIRED': 'Hết hạn giữ chỗ',
@@ -485,7 +486,10 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
 
   Future<void> hold() async {
     if (pending == null &&
-        (!form.currentState!.validate() || !accepted || quote == null)) {
+        (quote == null ||
+            quote!['canHold'] == false ||
+            !form.currentState!.validate() ||
+            !accepted)) {
       return;
     }
     pending ??= {
@@ -533,6 +537,7 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                 'INVALID_REQUEST',
                 'VALIDATION_ERROR',
                 'HOLD_LIMIT',
+                'HOLD_WINDOW_TOO_SHORT',
                 'IDEMPOTENCY_CONFLICT',
                 'FORBIDDEN',
                 'HOUSEHOLD_NOT_APPROVED',
@@ -588,6 +593,15 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
               child: const Text('Kiểm tra và lấy báo giá'),
             ),
             if (quote != null) ...[
+              const Notice(
+                'Giữ chỗ tối đa 24 giờ và kết thúc trước giờ sử dụng 2 giờ. Hộ cần ít nhất 30 phút để phản hồi.',
+              ),
+              if (quote!['canHold'] == false)
+                const Notice(
+                  'Đã quá thời gian nhận yêu cầu giữ chỗ cho lịch này. Vui lòng chọn lịch khác.',
+                ),
+              if (quote!['holdExpiresAt'] != null)
+                Text('Hạn dự kiến: ${calendarTime(quote!['holdExpiresAt'])}'),
               Text(
                 'Tổng: ${money(quote!['totalVnd'] as int)}',
                 style: Theme.of(context).textTheme.titleLarge,
@@ -664,7 +678,12 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
                 'Máy chủ chưa xác nhận kết quả. Thử lại gửi cùng yêu cầu để tránh tạo đơn trùng.',
               ),
             FilledButton(
-              onPressed: busy || (!accepted && pending == null) ? null : hold,
+              onPressed:
+                  busy ||
+                      (pending == null &&
+                          (!accepted || quote?['canHold'] == false))
+                  ? null
+                  : hold,
               child: Text(
                 busy
                     ? 'Đang xử lý…'
@@ -674,6 +693,174 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
               ),
             ),
           ],
+        ],
+      ),
+    ),
+  );
+}
+
+class BookingNotificationsPage extends StatefulWidget {
+  const BookingNotificationsPage({super.key, required this.api});
+  final TourismApi api;
+  @override
+  State<BookingNotificationsPage> createState() =>
+      _BookingNotificationsPageState();
+}
+
+class _BookingNotificationsPageState extends State<BookingNotificationsPage> {
+  late final epoch = widget.api.epoch;
+  Json? data;
+  Object? error;
+  int page = 1;
+  bool unreadOnly = false;
+  bool busy = false;
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  Future<void> load() async {
+    if (!widget.api.signedIn || widget.api.epoch != epoch || busy) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final result = await widget.api.request(
+        'GET',
+        '/notifications',
+        query: {
+          'page': page,
+          'pageSize': 20,
+          'unreadOnly': unreadOnly.toString(),
+        },
+      );
+      if (mounted && widget.api.epoch == epoch) setState(() => data = result);
+    } catch (e) {
+      if (mounted) setState(() => error = e);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> open(Json notification) async {
+    if (busy || widget.api.epoch != epoch || !widget.api.signedIn) return;
+    try {
+      await widget.api.request(
+        'POST',
+        '/notifications/${notification['id']}/read',
+      );
+      if (!mounted || widget.api.epoch != epoch) return;
+      final navigation = object(notification['navigation']);
+      if (navigation['screen'] == 'booking' &&
+          navigation['bookingId'] != null) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BookingDetailPage(
+              api: widget.api,
+              id: navigation['bookingId'].toString(),
+              host: navigation['audience'] == 'host',
+            ),
+          ),
+        );
+      } else {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(notification['title'].toString()),
+            content: Text(notification['body'].toString()),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Đóng'),
+              ),
+            ],
+          ),
+        );
+      }
+      if (mounted) await load();
+    } catch (e) {
+      if (mounted) setState(() => error = e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _BookingAccess(
+    api: widget.api,
+    epoch: epoch,
+    page: () => Scaffold(
+      appBar: AppBar(
+        title: const Text('Thông báo'),
+        actions: [
+          IconButton(
+            onPressed: busy ? null : load,
+            tooltip: 'Tải lại',
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (data != null) Text('${data!['unreadCount']} thông báo chưa đọc'),
+          SwitchListTile(
+            title: const Text('Chỉ chưa đọc'),
+            value: unreadOnly,
+            onChanged: busy
+                ? null
+                : (v) {
+                    setState(() {
+                      unreadOnly = v;
+                      page = 1;
+                    });
+                    load();
+                  },
+          ),
+          if (busy) const LinearProgressIndicator(),
+          if (error != null) ErrorPanel(error!, retry: load),
+          if (data != null && records(data!['items']).isEmpty)
+            const EmptyPanel('Chưa có thông báo trong bộ lọc này.'),
+          for (final n in records(data?['items']))
+            Card(
+              child: ListTile(
+                leading: Icon(
+                  n['readAt'] == null
+                      ? Icons.notifications_active_outlined
+                      : Icons.notifications_none,
+                ),
+                title: Text(n['title'].toString()),
+                subtitle: Text('${n['body']}\n${calendarTime(n['createdAt'])}'),
+                onTap: busy ? null : () => open(n),
+              ),
+            ),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: busy || page <= 1
+                    ? null
+                    : () {
+                        setState(() => page--);
+                        load();
+                      },
+                child: const Text('Trang trước'),
+              ),
+              Text('Trang $page'),
+              TextButton(
+                onPressed: busy || page * 20 >= (data?['total'] as int? ?? 0)
+                    ? null
+                    : () {
+                        setState(() => page++);
+                        load();
+                      },
+                child: const Text('Trang sau'),
+              ),
+            ],
+          ),
         ],
       ),
     ),
@@ -728,6 +915,16 @@ class _BookingListPageState extends State<BookingListPage> {
       appBar: AppBar(
         title: Text(widget.host ? 'Đơn đặt của hộ' : 'Chuyến đi của tôi'),
         actions: [
+          IconButton(
+            tooltip: 'Thông báo',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BookingNotificationsPage(api: widget.api),
+              ),
+            ),
+            icon: const Icon(Icons.notifications_outlined),
+          ),
           if (widget.host)
             IconButton(
               tooltip: 'Sổ tiền',
@@ -796,7 +993,7 @@ class _BookingListPageState extends State<BookingListPage> {
                       child: ListTile(
                         title: Text(b['code'].toString()),
                         subtitle: Text(
-                          '${bookingStates[b['status']] ?? b['status']} · ${money(b['totalVnd'] as int)}\n${calendarTime(b['firstStartsAt'])}',
+                          '${bookingStates[b['displayStatus'] ?? b['status']] ?? b['status']} · ${money(b['totalVnd'] as int)}\n${calendarTime(b['firstStartsAt'])}',
                         ),
                         isThreeLine: true,
                         trailing: const Icon(Icons.chevron_right),
@@ -853,6 +1050,19 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   Object? error;
   bool busy = false;
   Timer? timer;
+  int loadVersion = 0;
+  Json? cancellationRetry;
+  DateTime serverAt = DateTime.now().toUtc();
+  DateTime loadedAt = DateTime.now().toUtc();
+  DateTime get currentTime =>
+      serverAt.add(DateTime.now().toUtc().difference(loadedAt));
+  void applyDetail(Json data) {
+    detail = data;
+    loadedAt = DateTime.now().toUtc();
+    serverAt =
+        DateTime.tryParse(data['serverNow']?.toString() ?? '') ?? loadedAt;
+  }
+
   String get path =>
       '${widget.host ? '/households/me/bookings' : '/bookings'}/${widget.id}';
   @override
@@ -860,7 +1070,11 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     super.initState();
     load();
     timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (detail?['booking']?['status'] == 'PENDING' && !busy) load();
+      if ((detail?['booking']?['status'] == 'PENDING' ||
+              detail?['booking']?['pendingCancellation'] != null) &&
+          !busy) {
+        load();
+      }
     });
   }
 
@@ -872,11 +1086,12 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
 
   Future<void> load() async {
     if (!widget.api.signedIn || widget.api.epoch != epoch) return;
+    final version = ++loadVersion;
     try {
       final data = await widget.api.request('GET', path);
-      if (mounted) {
+      if (mounted && widget.api.epoch == epoch && version == loadVersion) {
         setState(() {
-          detail = data;
+          applyDetail(data);
           error = null;
         });
       }
@@ -884,6 +1099,10 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
       if (mounted) setState(() => error = e);
     }
   }
+
+  bool can(String action) =>
+      detail?['allowedActions'] == null ||
+      (detail!['allowedActions'] as List).contains(action);
 
   Future<void> transition(String action) async {
     final reason = await askReason(
@@ -900,7 +1119,13 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
           ? 'Chỉ hoàn thành sau khi tất cả hạng mục kết thúc và đã phục vụ đầy đủ.'
           : null,
     );
-    if (reason == null || !mounted) return;
+    if (reason == null ||
+        !mounted ||
+        widget.api.epoch != epoch ||
+        !widget.api.signedIn) {
+      return;
+    }
+    loadVersion++;
     setState(() {
       busy = true;
       error = null;
@@ -908,14 +1133,103 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     try {
       final data = await widget.api.request(
         'POST',
-        '${action == 'cancel' ? '/bookings/${widget.id}' : path}/$action',
+        '$path/$action',
         body: {
           'expectedToken': object(detail!['booking'])['token'],
           'reason': reason,
         },
       );
-      if (mounted) setState(() => detail = data);
+      if (mounted && widget.api.epoch == epoch) {
+        setState(() => applyDetail(data));
+      }
     } catch (e) {
+      if (mounted) setState(() => error = e);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> cancellationAction(String action) async {
+    if (busy || cancellationRetry != null || detail == null) return;
+    final b = object(detail!['booking']);
+    final reason = await askReason(
+      context,
+      {
+        'request': 'Gửi yêu cầu hủy',
+        'withdraw': 'Rút yêu cầu hủy',
+        'confirm': 'Xác nhận hủy',
+      }[action]!,
+      description: action == 'request'
+          ? 'Yêu cầu được gửi ngay. Chỗ vẫn được giữ đến khi hộ xác nhận hủy; đơn chưa xác nhận vẫn hết hạn theo hạn cũ.'
+          : action == 'confirm'
+          ? 'Giải phóng chỗ của đơn này. Các khoản thu và hoàn tiền giữ nguyên để đối soát riêng.'
+          : 'Tiếp tục booking theo thời hạn cũ, không gia hạn giữ chỗ.',
+    );
+    if (reason == null ||
+        !mounted ||
+        widget.api.epoch != epoch ||
+        !widget.api.signedIn) {
+      return;
+    }
+    final target = action == 'request'
+        ? '/bookings/${widget.id}/cancellation-requests'
+        : '$path/cancellation-requests/${object(b['pendingCancellation'])['id']}/$action';
+    cancellationRetry = {
+      'path': target,
+      'body': {
+        'expectedToken': b['token'],
+        'idempotencyKey': bookingKey(),
+        'reason': reason,
+      },
+    };
+    await retryCancellation();
+  }
+
+  Future<void> retryCancellation() async {
+    if (busy ||
+        cancellationRetry == null ||
+        widget.api.epoch != epoch ||
+        !widget.api.signedIn) {
+      return;
+    }
+    loadVersion++;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final result = await widget.api.request(
+        'POST',
+        cancellationRetry!['path'].toString(),
+        body: object(cancellationRetry!['body']),
+      );
+      if (!mounted || widget.api.epoch != epoch) return;
+      setState(() {
+        cancellationRetry = null;
+        applyDetail(result);
+      });
+      // A replay returns the original decision; refresh to show subsequent changes.
+      await load();
+    } catch (e) {
+      if (!mounted || widget.api.epoch != epoch) return;
+      final definitive =
+          e is ApiFailure &&
+          [
+            'STALE_VERSION',
+            'HOLD_EXPIRED',
+            'INVALID_STATE',
+            'FORBIDDEN',
+            'ACCOUNT_BLOCKED',
+            'CANCELLATION_PENDING',
+            'SERVICE_ALREADY_STARTED',
+            'IDEMPOTENCY_CONFLICT',
+            'INVALID_REQUEST',
+            'VALIDATION_ERROR',
+          ].contains(e.code);
+      if (definitive) {
+        cancellationRetry = null;
+        await load();
+      }
       if (mounted) setState(() => error = e);
     } finally {
       if (mounted) setState(() => busy = false);
@@ -1022,7 +1336,12 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
       'Đảo chứng từ #${entry['id']}',
       description: 'Ghi một bút toán đảo, giữ nguyên chứng từ gốc.',
     );
-    if (reason == null || !mounted) return;
+    if (reason == null ||
+        !mounted ||
+        widget.api.epoch != epoch ||
+        !widget.api.signedIn) {
+      return;
+    }
     final payload = {
       'expectedToken': object(detail!['booking'])['token'],
       'idempotencyKey': bookingKey(),
@@ -1106,9 +1425,10 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                 final b = object(detail!['booking']),
                     summary = object(b['summary']),
                     pending = b['status'] == 'PENDING',
+                    cancelPending = b['pendingCancellation'] != null,
                     confirmed = b['status'] == 'CONFIRMED',
                     future = DateTime.parse(b['firstStartsAt'].toString())
-                        .isAfter(DateTime.now().toUtc());
+                        .isAfter(currentTime);
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
@@ -1117,13 +1437,58 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     Text(
-                      bookingStates[b['status']] ?? b['status'].toString(),
+                      bookingStates[b['displayStatus'] ?? b['status']] ??
+                          b['status'].toString(),
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     Text('Tổng giá trị ${money(b['totalVnd'] as int)}'),
                     if (pending)
                       Notice(
                         'Giữ chỗ đến ${calendarTime(b['holdExpiresAt'])}. Hết hạn sẽ tự giải phóng nếu hộ chưa xác nhận.',
+                      ),
+                    if (cancelPending) ...[
+                      Notice(
+                        'Yêu cầu hủy lúc ${calendarTime(object(b['pendingCancellation'])['createdAt'])}. ${object(b['pendingCancellation'])['reason']}\nChỗ vẫn được giữ đến khi hộ xác nhận hủy. Khoản thu/hoàn được xử lý riêng.',
+                      ),
+                      if (widget.host && can('confirmCancellation'))
+                        FilledButton(
+                          onPressed: busy || cancellationRetry != null
+                              ? null
+                              : () => cancellationAction('confirm'),
+                          child: const Text('Xác nhận hủy theo yêu cầu khách'),
+                        ),
+                      if (!widget.host && future && can('withdrawCancellation'))
+                        OutlinedButton(
+                          onPressed: busy || cancellationRetry != null
+                              ? null
+                              : () => cancellationAction('withdraw'),
+                          child: const Text('Rút yêu cầu hủy'),
+                        ),
+                    ],
+                    if (cancellationRetry != null) ...[
+                      const Notice(
+                        'Chưa xác định được kết quả. Thử lại cùng yêu cầu để tránh xử lý trùng.',
+                      ),
+                      FilledButton(
+                        onPressed: busy ? null : retryCancellation,
+                        child: const Text('Thử lại thao tác hủy'),
+                      ),
+                    ],
+                    for (final request in records(
+                      detail!['cancellations'],
+                    ).where((r) => r['status'] != 'OPEN'))
+                      ListTile(
+                        title: Text(
+                          {
+                                'ACCEPTED': 'Hộ đã xác nhận hủy',
+                                'WITHDRAWN': 'Khách đã rút yêu cầu hủy',
+                                'CLOSED': 'Yêu cầu hủy đã đóng',
+                              }[request['status']] ??
+                              request['status'].toString(),
+                        ),
+                        subtitle: Text(
+                          '${request['reason']}\n${request['closedReason'] ?? ''} · ${calendarTime(request['closedAt'])}',
+                        ),
                       ),
                     if (b['closedReason'] != null)
                       Notice(b['closedReason'].toString()),
@@ -1165,31 +1530,46 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                       '${object(b['contact'])['name']} · ${object(b['contact'])['phone']}',
                     ),
                     Text(object(b['contact'])['email']?.toString() ?? ''),
-                    if (widget.host && pending)
+                    if (widget.host && pending && !cancelPending)
                       Wrap(
                         spacing: 8,
                         children: [
                           FilledButton(
-                            onPressed: busy
+                            onPressed: busy || !can('confirm')
                                 ? null
                                 : () => transition('confirm'),
                             child: const Text('Xác nhận'),
                           ),
                           OutlinedButton(
-                            onPressed: busy ? null : () => transition('reject'),
+                            onPressed: busy || !can('reject')
+                                ? null
+                                : () => transition('reject'),
                             child: const Text('Từ chối'),
                           ),
                         ],
                       ),
-                    if ((pending || confirmed) && future)
+                    if ((pending || confirmed) &&
+                        future &&
+                        !cancelPending &&
+                        can(widget.host ? 'cancel' : 'requestCancellation'))
                       OutlinedButton(
-                        onPressed: busy ? null : () => transition('cancel'),
-                        child: const Text('Hủy đơn đặt'),
+                        onPressed: busy || cancellationRetry != null
+                            ? null
+                            : () => widget.host
+                                  ? transition('cancel')
+                                  : cancellationAction('request'),
+                        child: Text(
+                          widget.host
+                              ? 'Hộ chủ động hủy đơn'
+                              : 'Yêu cầu hủy đơn',
+                        ),
                       ),
                     if (widget.host &&
+                        can('complete') &&
+                        !cancelPending &&
                         confirmed &&
                         DateTime.parse(b['lastEndsAt'].toString())
-                            .isBefore(DateTime.now().toUtc()))
+                            .isBefore(currentTime))
                       FilledButton(
                         onPressed: busy ? null : () => transition('complete'),
                         child: const Text('Hoàn thành phục vụ'),

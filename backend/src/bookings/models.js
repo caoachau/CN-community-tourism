@@ -28,11 +28,14 @@ export const itemOf=i=>({id:String(i.id),kind:i.kind,roomId:i.room_id?String(i.r
   slotId:i.slot_id?String(i.slot_id):null,participants:i.participant_count,quantity:Number(i.quantity),pricingType:i.pricing_type,isExclusive:Boolean(i.is_exclusive),
   checkInDate:dateOnly(i.check_in_date),checkOutDate:dateOnly(i.check_out_date),startsAt:iso(i.starts_at),endsAt:iso(i.ends_at),unitPriceVnd:Number(i.unit_price_vnd),
   baseAmountVnd:Number(i.base_amount_vnd),addonsAmountVnd:Number(i.addons_amount_vnd),totalVnd:Number(i.total_vnd),snapshot:json(i.snapshot),addons:json(i.addons_snapshot),outcome:i.outcome});
-export function bookingOf(row,entries=[],review=null){
+export const cancellationOf=r=>({id:String(r.id),status:r.status,reason:r.message,createdAt:iso(r.created_at),closedAt:iso(r.closed_at),closedReason:r.closed_reason,resolutionCode:r.resolution_code});
+export const notificationOf=r=>({id:String(r.id),type:r.event_type,title:r.title,body:r.body,navigation:json(r.navigation),createdAt:iso(r.created_at),readAt:iso(r.read_at)});
+export function bookingOf(row,entries=[],review=null,cancellations=[]){
+  const pending=['PENDING','CONFIRMED'].includes(row.status)?cancellations.find(r=>r.status==='OPEN'):null;
   const data={id:String(row.id),code:row.booking_code,householdId:String(row.household_id),customerId:row.customer_user_id?String(row.customer_user_id):null,
-    status:row.status,source:row.source,contact:{name:row.contact_name,phone:row.contact_phone,email:row.contact_email},totalVnd:Number(row.total_vnd),
+    status:row.status,displayStatus:pending?'CANCEL_REQUESTED':row.status,pendingCancellation:pending?cancellationOf(pending):null,source:row.source,contact:{name:row.contact_name,phone:row.contact_phone,email:row.contact_email},totalVnd:Number(row.total_vnd),
     firstStartsAt:iso(row.first_starts_at),lastEndsAt:iso(row.last_ends_at),holdExpiresAt:iso(row.hold_expires_at),confirmedAt:iso(row.confirmed_at),closedAt:iso(row.closed_at),
     closedReason:row.closed_reason,createdAt:iso(row.created_at),summary:ledgerSummary(entries,Number(row.total_vnd))};
   if(['CANCELLED','REJECTED','EXPIRED','NO_SHOW','INTERRUPTED'].includes(row.status))data.summary.balanceDueVnd=0;
-  return {...data,token:digest({...data,entries:entries.map(e=>String(e.id)),review:review?reviewOf(review):null})};
+  return {...data,token:digest({...data,currentSetId:String(row.current_reservation_set_id),cancellations:cancellations.map(cancellationOf),entries:entries.map(e=>String(e.id)),review:review?reviewOf(review):null})};
 }

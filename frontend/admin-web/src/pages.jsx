@@ -12,12 +12,15 @@ export const reviewKinds={
 };
 export function useRemote(api,path,query={}) {
   const [version,setVersion]=useState(0),[state,setState]=useState({data:null,error:null,loading:true}),signature=JSON.stringify(query);
+  const key=JSON.stringify([path,signature,version]);
   useEffect(()=>{
-    let active=true;const controller=new AbortController();setState({data:null,error:null,loading:true});
-    api.request('GET',path,{query:JSON.parse(signature),signal:controller.signal}).then(data=>{if(active)setState({data,error:null,loading:false});}).catch(error=>{if(active&&!controller.signal.aborted)setState({data:null,error,loading:false});});
+    let active=true;const controller=new AbortController();setState({key,api,data:null,error:null,loading:true});
+    api.request('GET',path,{query:JSON.parse(signature),signal:controller.signal}).then(data=>{if(active)setState({key,api,data,error:null,loading:false});}).catch(error=>{if(active&&!controller.signal.aborted)setState({key,api,data:null,error,loading:false});});
     return()=>{active=false;controller.abort();};
   },[api,path,signature,version]);
-  return {...state,reload:()=>setVersion(value=>value+1)};
+  // Effects run after rendering: never expose a previous tab's differently shaped data.
+  const current=state.key===key&&state.api===api?state:{data:null,error:null,loading:true};
+  return {...current,reload:()=>setVersion(value=>value+1)};
 }
 export function Reviews({api,kind,onAccount,notify}) {
   const config=reviewKinds[kind],[status,setStatus]=useState('PENDING'),[page,setPage]=useState(1),[householdId,setHouseholdId]=useState(''),[filter,setFilter]=useState(''),[selected,setSelected]=useState(null);

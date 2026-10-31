@@ -4,7 +4,9 @@ import { databaseIdSchema } from '../shared/validation.js';
 import { digest, json } from '../services/models.js';
 import { iso } from '../calendar/models.js';
 import { createAvailabilityService } from './availability-service.js';
-import { bookingOf, itemOf, entryOf, reviewOf, ledgerSummary } from './models.js';
+import { bookingOf, itemOf, entryOf, reviewOf, ledgerSummary, cancellationOf } from './models.js';
+import { holdWindow } from './hold-policy.js';
+import { cancellationMethods } from './cancellation-service.js';
 import * as schemas from './schemas.js';
 
 const parse=(schema,value)=>{const result=schema.safeParse(value);if(!result.success)throw new AppError('INVALID_REQUEST');return result.data;};
@@ -12,13 +14,11 @@ const query=(schema,input)=>{try{return schemas.query(schema,input);}catch{throw
 const match=(a,b)=>{if(a!==b)throw new AppError('STALE_VERSION');};
 const page=(items,total,input)=>({items,total,page:input.page,pageSize:input.pageSize});
 const activeOwner=u=>u&&u.role==='HOUSEHOLD'&&u.status==='ACTIVE'&&!u.disabled_at;
-const wholeSecond=date=>new Date(Math.floor(+date/1000)*1000);
 
-export function createBookingService({repository,availabilityService=createAvailabilityService(),holdMinutes=15}){
-  if(!Number.isInteger(holdMinutes)||holdMinutes<1||holdMinutes>30)throw new TypeError('Invalid hold TTL');
+export function createBookingService({repository,availabilityService=createAvailabilityService()}){
   async function context(tx,auth,target,{acquire=false}={}){
     if(!target)throw new AppError('NOT_FOUND');
-    const {actor,users}=await lockCurrentActor(tx,auth,acquire?['CUSTOMER','HOUSEHOLD']:['CUSTOMER','HOUSEHOLD','ADMIN'],[String(target.owner_user_id)]);
+    const {actor,users}=await lockCurrentActor(tx,auth,acquire?['CUSTOMER','HOUSEHOLD']:['CUSTOMER','HOUSEHOLD','ADMIN'],[target.owner_user_id,target.customer_user_id].filter(Boolean).map(String));
     const household=await tx.household(target.household_id??target.id,true);
     if(!household||String(household.owner_user_id)!==String(target.owner_user_id))throw new AppError('NOT_FOUND');
     if(acquire&&(!activeOwner(users.get(String(target.owner_user_id)))||actor.id===String(target.owner_user_id)))throw new AppError('FORBIDDEN');
@@ -36,17 +36,45 @@ export function createBookingService({repository,availabilityService=createAvail
     if(typeof requestId!=='string'||!requestId||requestId.length>100)throw new AppError('INVALID_REQUEST');
     await tx.event({householdId:state.household.id,actor:state.actor,entityType,entityId,action,requestId,reason,before:before??null,after:after??null});
   }
+  async function notify(tx,row,key,type,title,body){
+    const target=await tx.householdTarget(row.household_id);
+    await tx.notifyBooking(target.owner_user_id,row,key,type,title,body,'host');
+    if(row.customer_user_id)await tx.notifyBooking(row.customer_user_id,row,key,type,title,body,'customer');
+  }
   async function expire(tx,row,at){
     if(row.status!=='PENDING')return false;
     const set=await tx.bookingSet(row.current_reservation_set_id);
     if(+row.hold_expires_at>+at&&set?.status==='HELD'&&!set.released_at&&+set.expires_at>+at)return false;
     await tx.transition(row,'EXPIRED','Hết thời hạn giữ chỗ',at);
     await tx.history(row.household_id,row.id,'PENDING','EXPIRED',null,'SYSTEM','Hết thời hạn giữ chỗ');
+    for(const request of await tx.cancellations(row.id))if(request.status==='OPEN')await tx.closeCancellation(request.id,'CLOSED','Hết thời hạn giữ chỗ','HOLD_EXPIRED',null,at);
+    await tx.closeBookingChanges(row.id,at,'Hết thời hạn giữ chỗ','HOLD_EXPIRED');
+    await notify(tx,row,`booking:${row.id}:EXPIRED`,'BOOKING_EXPIRED','Booking đã hết hạn giữ chỗ','Hộ chưa xác nhận trong thời hạn. Chỗ đã được giải phóng.');
     row.status='EXPIRED';row.closed_at=at;row.closed_reason='Hết thời hạn giữ chỗ';return true;
   }
-  async function detail(tx,row){
-    const entries=await tx.entries(row.id),review=await tx.bookingReview(row.id);
-    return {booking:bookingOf(row,entries,review),items:(await tx.bookingItems(row.current_reservation_set_id)).map(itemOf),entries:entries.map(entryOf),review:review?reviewOf(review):null,
+  async function detail(tx,row,state){
+    const entries=await tx.entries(row.id),review=await tx.bookingReview(row.id),cancellations=await tx.cancellations(row.id);
+    const booking=bookingOf(row,entries,review,cancellations),at=(await tx.databaseNow()).now_at;
+    const owner=state?.actor.role==='HOUSEHOLD'&&String(state.household.owner_user_id)===state.actor.id;
+    const customer=String(row.customer_user_id)===state?.actor.id,live=['PENDING','CONFIRMED'].includes(row.status),future=+at<+row.first_starts_at;
+    const allowedActions=[];
+    if(live){
+      if(booking.pendingCancellation){
+        if(customer&&future)allowedActions.push('withdrawCancellation');
+        if(owner&&!await tx.hasServiceActivity(row.current_reservation_set_id))allowedActions.push('confirmCancellation');
+      }else{
+        if(future&&!await tx.hasServiceActivity(row.current_reservation_set_id)){
+          if(customer)allowedActions.push('requestCancellation');
+          if(owner)allowedActions.push('cancel');
+        }
+        if(owner&&row.status==='PENDING'&&+at<+row.hold_expires_at){
+          allowedActions.push('reject');
+          if(future&&!state.household.archived_at&&state.household.approval_status==='APPROVED')allowedActions.push('confirm');
+        }
+        if(owner&&row.status==='CONFIRMED'&&+at>=+row.last_ends_at)allowedActions.push('complete');
+      }
+    }
+    return {booking,allowedActions,cancellations:cancellations.map(cancellationOf),serverNow:iso(at),items:(await tx.bookingItems(row.current_reservation_set_id)).map(itemOf),entries:entries.map(entryOf),review:review?reviewOf(review):null,
       terms:json(row.terms_snapshot)?.contract??{},history:(await tx.histories(row.id)).map(h=>({from:h.from_status,to:h.to_status,actorType:h.actor_type,reason:h.reason,createdAt:iso(h.created_at)}))};
   }
   async function scope(tx,auth,adminOnly=false,audience='host'){
@@ -73,23 +101,26 @@ export function createBookingService({repository,availabilityService=createAvail
     }
   }
   return {
+    ...cancellationMethods({repository,parse,query,bookingContext,detail,expire,audit,notify}),
     async quote(auth,input){input=parse(schemas.cart,input);return repository.transaction(async tx=>{
       const state=await context(tx,auth,await tx.householdTarget(input.householdId),{acquire:true});
-      return {quote:await availabilityService.quote(tx,state.household,input,state.at)};
+      const quote=await availabilityService.quote(tx,state.household,input,state.at);
+      return {quote:{...quote,...holdWindow(state.at,quote.firstStartsAt)}};
     });},
     async hold(auth,input,requestId){input=parse(schemas.hold,input);return repository.transaction(async tx=>{
       const state=await context(tx,auth,await tx.householdTarget(input.householdId),{acquire:true});
       const code=`BK-${digest({customerId:state.actor.id,key:input.idempotencyKey}).slice(0,32)}`,requestDigest=digest(input),existing=await tx.bookingByCode(code);
       if(existing){
         if(String(existing.customer_user_id)!==state.actor.id||json(existing.terms_snapshot)?.requestDigest!==requestDigest)throw new AppError('IDEMPOTENCY_CONFLICT');
-        await expire(tx,existing,state.at);return {...await detail(tx,await tx.booking(existing.id,state.household.id)),replayed:true};
+        await expire(tx,existing,state.at);return {...await detail(tx,await tx.booking(existing.id,state.household.id),state),replayed:true};
       }
       if(await tx.pendingCount(state.actor.id)>=5)throw new AppError('HOLD_LIMIT');
       const quote=await availabilityService.quote(tx,state.household,input,state.at);
       if(quote.token!==input.expectedQuoteToken)throw new AppError('QUOTE_CHANGED');
-      const expiresAt=wholeSecond(new Date(Math.min(+state.at+holdMinutes*60000,Date.parse(quote.firstStartsAt))));
-      if(+expiresAt<=+state.at)throw new AppError('AVAILABILITY_CONFLICT');
-      const contract={householdTitle:quote.householdTitle,timeZone:quote.timeZone,confirmation:'Chờ hộ xác nhận trước khi hết hạn giữ chỗ',cancellation:'Khách được hủy trước khi bắt đầu; hộ ghi nhận riêng thỏa thuận và khoản hoàn thực tế.'};
+      const window=holdWindow(state.at,quote.firstStartsAt);
+      if(!window.canHold)throw new AppError('HOLD_WINDOW_TOO_SHORT');
+      const expiresAt=new Date(window.holdExpiresAt);
+      const contract={householdTitle:quote.householdTitle,timeZone:quote.timeZone,confirmation:'Chờ hộ xác nhận trước khi hết hạn giữ chỗ',holdPolicyVersion:window.holdPolicyVersion,hold:'Tối đa 24 giờ, hết hạn trước giờ sử dụng 2 giờ, cần ít nhất 30 phút phản hồi.',cancellation:'Khách gửi hủy trước giờ bắt đầu. Chỗ được giữ đến khi hộ xác nhận hủy; đơn chưa xác nhận vẫn hết hạn theo hạn cũ. Thu/hoàn tiền ghi riêng.'};
       const bookingId=await tx.createBooking({household_id:state.household.id,booking_code:code,customer_user_id:state.actor.id,created_by:state.actor.id,source:'ONLINE',status:'PENDING',
         contact_name:input.contact.name,contact_phone:input.contact.phone,contact_email:input.contact.email,first_starts_at:new Date(quote.firstStartsAt),last_ends_at:new Date(quote.lastEndsAt),total_vnd:quote.totalVnd,
         terms_snapshot:JSON.stringify({contract,requestDigest}),hold_expires_at:expiresAt});
@@ -105,15 +136,16 @@ export function createBookingService({repository,availabilityService=createAvail
       }
       await tx.history(state.household.id,bookingId,null,'PENDING',state.actor.id,'CUSTOMER','Khách gửi yêu cầu giữ chỗ');
       state.row=await tx.booking(bookingId,state.household.id);await audit(tx,state,'BOOKING_HELD',requestId,null,{status:'PENDING',totalVnd:quote.totalVnd});
-      return {...await detail(tx,state.row),replayed:false};
+      await notify(tx,state.row,`booking:${bookingId}:PENDING`,'BOOKING_HELD','Có yêu cầu đặt chỗ mới','Vui lòng xử lý trước thời hạn giữ chỗ ghi trên booking.');
+      return {...await detail(tx,state.row,state),replayed:false};
     });},
-    async get(auth,bookingId){return repository.transaction(async tx=>{const state=await bookingContext(tx,auth,bookingId);await expire(tx,state.row,state.at);return detail(tx,await tx.booking(bookingId,state.household.id));});},
+    async get(auth,bookingId){return repository.transaction(async tx=>{const state=await bookingContext(tx,auth,bookingId);await expire(tx,state.row,state.at);return detail(tx,await tx.booking(bookingId,state.household.id),state);});},
     async list(auth,input,{adminOnly=false,audience='customer'}={}){input=query(schemas.list,input);return repository.transaction(async tx=>{
       const state=await scope(tx,auth,adminOnly,audience),result=await tx.listBookings(state.filter,input);
       // Expiry is evaluated at reads as well as by the worker. List filters are
       // refreshed by the worker; individual rows always carry an effective state.
       const at=(await tx.databaseNow()).now_at;
-      const items=[];for(const row of result.rows)items.push(bookingOf(row.status==='PENDING'&&+row.hold_expires_at<=+at?{...row,status:'EXPIRED'}:row,await tx.entries(row.id,false),await tx.bookingReview(row.id,false)));
+      const items=[];for(const row of result.rows)items.push(bookingOf(row.status==='PENDING'&&+row.hold_expires_at<=+at?{...row,status:'EXPIRED'}:row,await tx.entries(row.id,false),await tx.bookingReview(row.id,false),await tx.cancellations(row.id,false)));
       return page(items,result.total,input);
     });},
     async transition(auth,bookingId,action,input,requestId){
@@ -121,12 +153,14 @@ export function createBookingService({repository,availabilityService=createAvail
       const result=await repository.transaction(async tx=>{
         const state=await bookingContext(tx,auth,bookingId),{row}=state;
         if(state.actor.role==='ADMIN')throw new AppError('FORBIDDEN');
+        if(action==='cancel'&&!state.owner)throw new AppError('CANCELLATION_REQUEST_REQUIRED');
         if(await expire(tx,row,state.at))return {error:'HOLD_EXPIRED'};
-        const before=(await detail(tx,row)).booking;match(before.token,input.expectedToken);
+        const before=(await detail(tx,row,state)).booking;match(before.token,input.expectedToken);
+        if(before.pendingCancellation)throw new AppError('CANCELLATION_PENDING');
         const next={confirm:'CONFIRMED',reject:'REJECTED',cancel:'CANCELLED',complete:'COMPLETED'}[action];
         if(!next)throw new AppError('INVALID_REQUEST');
         if(action==='cancel'){
-          if(!['PENDING','CONFIRMED'].includes(row.status)||+state.at>=+row.first_starts_at||(!state.customer&&!state.owner))throw new AppError('INVALID_STATE');
+          if(!['PENDING','CONFIRMED'].includes(row.status)||+state.at>=+row.first_starts_at||!state.owner)throw new AppError('INVALID_STATE');
         }else if(!state.owner)throw new AppError('FORBIDDEN');
         else if(action==='confirm'){
           if(row.status!=='PENDING'||state.household.archived_at||state.household.approval_status!=='APPROVED'||+state.at>=+row.first_starts_at)throw new AppError('INVALID_STATE');
@@ -134,18 +168,21 @@ export function createBookingService({repository,availabilityService=createAvail
           if(set?.status!=='HELD'||set.released_at||+set.expires_at<=+state.at)return {error:'HOLD_EXPIRED'};
         }else if(action==='reject'&&row.status!=='PENDING')throw new AppError('INVALID_STATE');
         else if(action==='complete'&&(row.status!=='CONFIRMED'||+state.at<+row.last_ends_at))throw new AppError('INVALID_STATE');
+        if(action==='cancel'&&await tx.hasServiceActivity(row.current_reservation_set_id))throw new AppError('SERVICE_ALREADY_STARTED');
         if(action==='complete')await tx.markServed(row.current_reservation_set_id,state.actor.id,state.at);
         await tx.transition(row,next,input.reason,state.at);
         await tx.history(row.household_id,row.id,row.status,next,state.actor.id,state.owner?'HOUSEHOLD':'CUSTOMER',input.reason);
-        const after=await detail(tx,await tx.booking(row.id,row.household_id));await audit(tx,state,`BOOKING_${next}`,requestId,before,after.booking,input.reason);
+        const after=await detail(tx,await tx.booking(row.id,row.household_id),state);await audit(tx,state,`BOOKING_${next}`,requestId,before,after.booking,input.reason);
+        if(['cancel','reject'].includes(action))await tx.closeBookingChanges(row.id,state.at,input.reason,`BOOKING_${next}`);
+        await notify(tx,row,`booking:${row.id}:${next}`,`BOOKING_${next}`,{CONFIRMED:'Booking đã được xác nhận',REJECTED:'Hộ dân đã từ chối booking',CANCELLED:'Hộ dân đã hủy booking',COMPLETED:'Booking đã hoàn thành'}[next],input.reason);
         return after;
       });
       if(result.error)throw new AppError(result.error);return result;
     },
     async addEntry(auth,bookingId,input,requestId){input=parse(schemas.entry,input);return repository.transaction(async tx=>{
       const state=await bookingContext(tx,auth,bookingId);if(!state.owner)throw new AppError('FORBIDDEN');
-      const entries=await tx.entries(bookingId),review=await tx.bookingReview(bookingId),before=bookingOf(state.row,entries,review),requestDigest=moneyRequest('entry',input);
-      const existing=existingEntry(entries,input,requestDigest);if(existing)return {...await detail(tx,state.row),entry:entryOf(existing),replayed:true};
+      const entries=await tx.entries(bookingId),review=await tx.bookingReview(bookingId),before=bookingOf(state.row,entries,review,await tx.cancellations(bookingId)),requestDigest=moneyRequest('entry',input);
+      const existing=existingEntry(entries,input,requestDigest);if(existing)return {...await detail(tx,state.row,state),entry:entryOf(existing),replayed:true};
       match(before.token,input.expectedToken);
       if(Date.parse(input.occurredAt)>+state.at+60000||Date.parse(input.occurredAt)<+state.row.created_at-1000)throw new AppError('INVALID_REQUEST');
       if(input.type==='RECEIPT'&&!['CONFIRMED','COMPLETED'].includes(state.row.status))throw new AppError('INVALID_STATE');
@@ -156,13 +193,13 @@ export function createBookingService({repository,availabilityService=createAvail
         evidence:JSON.stringify({idempotencyKey:input.idempotencyKey,requestDigest})};
       validateBalances([...entries,{...data,id:'new'}],Number(state.row.total_vnd));
       const entryId=await tx.createEntry(data);await audit(tx,state,'FINANCIAL_ENTRY_RECORDED',requestId,null,{entryId,type:input.type,amountVnd:input.amountVnd},input.note,'FINANCIAL_ENTRY',entryId);
-      const after=await detail(tx,state.row);return {...after,entry:after.entries.find(e=>e.id===entryId),replayed:false};
+      const after=await detail(tx,state.row,state);return {...after,entry:after.entries.find(e=>e.id===entryId),replayed:false};
     });},
     async reverseEntry(auth,bookingId,entryId,input,requestId){parse(databaseIdSchema,entryId);input=parse(schemas.reversal,input);return repository.transaction(async tx=>{
       const state=await bookingContext(tx,auth,bookingId);if(!state.owner)throw new AppError('FORBIDDEN');
       const entries=await tx.entries(bookingId),review=await tx.bookingReview(bookingId),requestDigest=moneyRequest(`reverse-${entryId}`,input),existing=existingEntry(entries,input,requestDigest);
-      if(existing)return {...await detail(tx,state.row),entry:entryOf(existing),replayed:true};
-      match(bookingOf(state.row,entries,review).token,input.expectedToken);
+      if(existing)return {...await detail(tx,state.row,state),entry:entryOf(existing),replayed:true};
+      match(bookingOf(state.row,entries,review,await tx.cancellations(bookingId)).token,input.expectedToken);
       const original=entries.find(e=>String(e.id)===entryId);
       if(!original||original.reverses_entry_id||!['RECEIPT','REFUND'].includes(original.entry_type)||entries.some(e=>String(e.reverses_entry_id)===entryId))throw new AppError('FINANCIAL_CONFLICT');
       if(Date.parse(input.occurredAt)>+state.at+60000||Date.parse(input.occurredAt)<+original.occurred_at)throw new AppError('INVALID_REQUEST');
@@ -171,7 +208,7 @@ export function createBookingService({repository,availabilityService=createAvail
         evidence:JSON.stringify({idempotencyKey:input.idempotencyKey,requestDigest})};
       validateBalances([...entries,data],Number(state.row.total_vnd));const id=await tx.createEntry(data);
       await audit(tx,state,'FINANCIAL_ENTRY_REVERSED',requestId,{entryId},{reversalId:id},input.note,'FINANCIAL_ENTRY',id);
-      const after=await detail(tx,state.row);return {...after,entry:after.entries.find(e=>e.id===id),replayed:false};
+      const after=await detail(tx,state.row,state);return {...after,entry:after.entries.find(e=>e.id===id),replayed:false};
     });},
     async ledger(auth,input,{adminOnly=false}={}){input=query(schemas.ledgerList,input);return repository.transaction(async tx=>{
       const state=await scope(tx,auth,adminOnly);if(state.actor.role==='CUSTOMER')throw new AppError('FORBIDDEN');
@@ -202,8 +239,11 @@ export function createBookingService({repository,availabilityService=createAvail
     async expireHolds(){
       const targets=await repository.transaction(tx=>tx.expiryTargets());let count=0;
       for(const target of targets)count+=await repository.transaction(async tx=>{
-        await tx.findUserById(String(target.owner_user_id),true);await tx.household(target.household_id,true);const at=(await tx.databaseNow()).now_at;
-        const expired=await tx.expired(target.household_id);for(const row of expired)await expire(tx,row,at);return expired.length;
+        const ids=[...new Set([target.owner_user_id,target.customer_user_id].filter(Boolean).map(String))].sort((a,b)=>BigInt(a)<BigInt(b)?-1:1);
+        for(const id of ids)await tx.findUserById(id,true);
+        await tx.household(target.household_id,true);const at=(await tx.databaseNow()).now_at;
+        const row=await tx.booking(target.booking_id,target.household_id);
+        return row&&await expire(tx,row,at)?1:0;
       });return {expired:count};
     },
   };
